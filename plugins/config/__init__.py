@@ -1,6 +1,6 @@
 from pathlib import Path
-from dynaconf import Dynaconf, Validator
-from appdirs import user_data_dir
+
+from dynaconf import Dynaconf
 
 APPNAME = "GPlugins"
 CUR_DIR = Path(__file__).parent
@@ -14,5 +14,5 @@ settings = Dynaconf(
     # from neogit.config import settings
     settings_files=[
         str(CUR_DIR / "default_settings.toml"),
-    ]
+    ],
 )
