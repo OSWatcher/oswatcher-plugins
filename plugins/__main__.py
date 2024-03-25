@@ -1,30 +1,14 @@
-"""Plugin Runner
-
-Usage:
-  runner [options] <commit_hash>
-
-Options:
-  -h --help             Show this screen.
-  --version             Show version.
-  -d --debug            Toogle debug output
-"""
-
-from functools import wraps
+import click
 import logging
 
-
-from docopt import docopt
-
-
-
 def setup_logging(debug_enabled: bool):
-    level = logging.INFO
-    if debug_enabled:
-        level = logging.DEBUG
+    level = logging.DEBUG if debug_enabled else logging.INFO
     logging.basicConfig(level=level)
 
-
-def handle_cmdline():
-    args = docopt(__doc__)
-    setup_logging(args["--debug"])
+@click.command()
+@click.option('--debug', '-d', is_flag=True, help='Toggle debug output')
+@click.argument('commit_hash')
+def runner(debug, commit_hash: str):
+    """Plugin Runner"""
+    setup_logging(debug)
     logging.info("Hello !")

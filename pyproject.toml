@@ -7,13 +7,17 @@ license = "private"
 readme = "README.md"
 
 [tool.poetry.scripts]
-runner = 'plugins.__main__:handle_cmdline'
+runner = 'plugins.__main__:runner'
 
 [tool.poetry.dependencies]
 python = "^3.11"
 poethepoet = "^0.24.3"
 ipdb = "^0.13.13"
-docopt = "0.6.2"
+click = "^8.1.7"
+attrs = "^23.2.0"
+neomodel = "^5.2.1"
+dynaconf = "^3.2.5"
+appdirs = "^1.4.4"
 
 
 [tool.poetry.group.dev.dependencies]
