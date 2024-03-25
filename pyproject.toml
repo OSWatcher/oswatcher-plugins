@@ -21,7 +21,6 @@ click = "^8.1.7"
 attrs = "^23.2.0"
 neomodel = "^5.2.1"
 dynaconf = "^3.2.5"
-appdirs = "^1.4.4"
 
 
 [tool.poetry.group.dev.dependencies]
