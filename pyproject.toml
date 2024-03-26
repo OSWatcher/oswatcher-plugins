@@ -19,7 +19,6 @@ poethepoet = "^0.24.3"
 ipdb = "^0.13.13"
 click = "^8.1.7"
 attrs = "^23.2.0"
-neomodel = "^5.2.1"
 dynaconf = "^3.2.5"
 
 
@@ -30,6 +29,7 @@ isort = "5.11.4"
 mypy = "1.7.0"
 appdirs-stubs = "^0.1.0"
 types-appdirs = "^1.4.3.1"
+neogit = { path = "../neogit", develop = true }
 
 [tool.poe.tasks]
 fmt = "black ."
