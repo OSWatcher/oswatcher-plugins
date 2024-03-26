@@ -1,14 +1,31 @@
 # define abstract Plugin Class
 
-from contextlib import AbstractContextManager
+import logging
+from abc import abstractmethod
 
-from neomodel import db as neomodel_db
+from attrs import Factory, define, field
+from neogit.service import Neogit
 
-from .config import settings
 
+@define(auto_attribs=True)
+class AbstractPlugin:
+    logger: logging.Logger = field(
+        init=False,
+        default=Factory(
+            lambda self: logging.getLogger(
+                f"{self.__module__}.{self.__class__.__name__}"
+            ),
+            takes_self=True,
+        ),
+    )
+    neogit: Neogit = field(init=False, default=Neogit())
 
-class AbstractPlugin(AbstractContextManager):
+    def _trans_run(self):
+        """Execute the run method inside a neomodel transaction"""
+        with self.neogit.db.transaction:
+            self.run()
 
-    def __init__(self) -> None:
-        super().__init__()
-        neomodel_db.set_connection(settings.neo4j.url_full)
+    @abstractmethod
+    def run(self):
+        """Run the plugin"""
+        pass
