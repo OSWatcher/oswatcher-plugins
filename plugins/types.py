@@ -2,8 +2,10 @@
 
 import logging
 from abc import abstractmethod
+from typing import Any
 
 from attrs import Factory, define, field
+from neogit.model.neo import Commit
 from neogit.service import Neogit
 
 
@@ -20,12 +22,12 @@ class AbstractPlugin:
     )
     neogit: Neogit = field(init=False, default=Neogit())
 
-    def _trans_run(self):
+    def __call__(self, commit: Commit, *args: Any, **kwds: Any) -> Any:
         """Execute the run method inside a neomodel transaction"""
         with self.neogit.db.transaction:
-            self.run()
+            self.run(commit)
 
     @abstractmethod
-    def run(self):
+    def run(self, commit: Commit):
         """Run the plugin"""
         pass
