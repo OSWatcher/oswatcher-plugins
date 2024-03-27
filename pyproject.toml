@@ -20,6 +20,7 @@ ipdb = "^0.13.13"
 click = "^8.1.7"
 attrs = "^23.2.0"
 dynaconf = "^3.2.5"
+python-magic = "^0.4.27"
 
 
 [tool.poetry.group.dev.dependencies]
