@@ -21,6 +21,8 @@ click = "^8.1.7"
 attrs = "^23.2.0"
 dynaconf = "^3.2.5"
 python-magic = "^0.4.27"
+lief = "0.13.2"
+volatility3 = "^2.5.2"
 
 
 [tool.poetry.group.dev.dependencies]
