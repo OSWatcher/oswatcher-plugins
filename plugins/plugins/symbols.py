@@ -66,8 +66,8 @@ class SymbolsPlugin(AbstractPlugin):
                 ctx = Context()
                 try:
                     j_data = PdbReader(ctx, location).get_json()
-                except ValueError:
-                    self.logger.exception("Failed to parse PDB")
+                except Exception:
+                    self.logger.exception("Failed to parse PDB on %s", blob_hash)
                     continue
                 self.parse_pdb_json(blob_hash, j_data)
 
@@ -84,7 +84,14 @@ class SymbolsPlugin(AbstractPlugin):
             location = filename
         return location
 
-    def insert_symbols(self, blob_hash, symbols: Dict):
+    def parse_pdb_json(self, blob_hash: str, j_pdb: Dict):
+        self.insert_enums(blob_hash, j_pdb["enums"])
+        self.insert_symbols(blob_hash, j_pdb["symbols"])
+
+    def insert_enums(self, blob_hash: str, j_pdb: Dict):
+        pass
+
+    def insert_symbols(self, blob_hash: str, symbols: Dict):
         param_list = []
         for sym, value in symbols.items():
             if sym.startswith("?") or sym.startswith("$"):
@@ -96,7 +103,7 @@ class SymbolsPlugin(AbstractPlugin):
                     "address": address,
                 }
             )
-            self.logger.info("Insert %s (%s)", sym, hex(address))
+            self.logger.debug("Insert %s (%s)", sym, hex(address))
         query = """
         MATCH (b:Blob {hash: $blob_hash})
         WITH b
@@ -104,6 +111,3 @@ class SymbolsPlugin(AbstractPlugin):
         MERGE (b)-[:HAS_SYMBOL {address: p.address}]->(s:Symbol {name: p.sym_name})
         """
         self.neogit.db.cypher_query(query, {"blob_hash": blob_hash, "unwind": param_list})
-
-    def parse_pdb_json(self, blob_hash, j_pdb: Dict):
-        self.insert_symbols(blob_hash, j_pdb["symbols"])
