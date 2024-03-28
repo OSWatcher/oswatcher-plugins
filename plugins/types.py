@@ -1,7 +1,9 @@
 # define abstract Plugin Class
 
 import logging
+import tempfile
 from abc import abstractmethod
+from contextlib import contextmanager
 from typing import Any
 
 from attrs import Factory, define, field
@@ -14,9 +16,7 @@ class AbstractPlugin:
     logger: logging.Logger = field(
         init=False,
         default=Factory(
-            lambda self: logging.getLogger(
-                f"{self.__module__}.{self.__class__.__name__}"
-            ),
+            lambda self: logging.getLogger(f"{self.__module__}.{self.__class__.__name__}"),
             takes_self=True,
         ),
     )
@@ -31,3 +31,11 @@ class AbstractPlugin:
     def run(self, commit: Commit):
         """Run the plugin"""
         pass
+
+    @contextmanager
+    def downloaded_file(self, hash: str):
+        with tempfile.NamedTemporaryFile(delete=True) as tmp_file:
+            for chunk in self.neogit.download_object_as_stream(hash):
+                tmp_file.write(chunk)
+            tmp_file.flush()
+            yield tmp_file.name

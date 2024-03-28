@@ -47,6 +47,4 @@ class FileTypePlugin(AbstractPlugin):
             MATCH (b:Blob {hash: $blob_hash})
             MERGE (b)-[:HAS_MIME_TYPE]->(m)
             """
-            self.neogit.db.cypher_query(
-                query, {"blob_hash": blob.hash, "mime_type": file_type}
-            )
+            self.neogit.db.cypher_query(query, {"blob_hash": blob.hash, "mime_type": file_type})
