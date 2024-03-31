@@ -23,6 +23,7 @@ dynaconf = "^3.2.5"
 python-magic = "^0.4.27"
 lief = "0.13.2"
 volatility3 = "^2.5.2"
+regipy = "^4.1.1"
 
 
 [tool.poetry.group.dev.dependencies]
