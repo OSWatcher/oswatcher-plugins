@@ -179,11 +179,14 @@ class WinRegistryPlugin(AbstractPlugin):
         MERGE (n:WinRegValue {hash: x.hash, value: x.value, type: x.type})
         MERGE (p)-[:HAS_WINREG_VALUE {name: x.name}]->(n)
         """
+        # note: Neo4j can store integer as signed 64 bits number
+        # however the Windows registry can contain REG_QWORD values up to 2^64 - 1
+        # so we need to ensure the value is casted as a string here
         unwind_param = [
             {
                 "name": child_name,
                 "hash": child_node.hash,
-                "value": child_node.value.value,
+                "value": str(child_node.value.value),
                 "type": child_node.value.value_type,
             }
             for child_name, child_node in node.return_value.children.items()
