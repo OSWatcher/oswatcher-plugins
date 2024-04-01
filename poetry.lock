@@ -287,6 +287,20 @@ files = [
 test = ["flake8 (==3.7.8)", "hypothesis (==3.55.3)"]
 
 [[package]]
+name = "construct"
+version = "2.10.70"
+description = "A powerful declarative symmetric parser/builder for binary data"
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "construct-2.10.70-py3-none-any.whl", hash = "sha256:c80be81ef595a1a821ec69dc16099550ed22197615f4320b57cc9ce2a672cb30"},
+    {file = "construct-2.10.70.tar.gz", hash = "sha256:4d2472f9684731e58cc9c56c463be63baa1447d674e0d66aeb5627b22f512c29"},
+]
+
+[package.extras]
+extras = ["arrow", "cloudpickle", "cryptography", "lz4", "numpy", "ruamel.yaml"]
+
+[[package]]
 name = "decorator"
 version = "5.1.1"
 description = "Decorators for Humans"
@@ -395,6 +409,17 @@ python-versions = ">=3.5"
 files = [
     {file = "idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f"},
     {file = "idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca"},
+]
+
+[[package]]
+name = "inflection"
+version = "0.5.1"
+description = "A port of Ruby on Rails inflector to Python"
+optional = false
+python-versions = ">=3.5"
+files = [
+    {file = "inflection-0.5.1-py2.py3-none-any.whl", hash = "sha256:f38b2b640938a4f35ade69ac3d053042959b62a0f1076a5bbaa1b9526605a8a2"},
+    {file = "inflection-0.5.1.tar.gz", hash = "sha256:1a29730d366e996aaacffb2f1f1cb9593dc38e2ddd30c91250c6dde09ea9b417"},
 ]
 
 [[package]]
@@ -996,6 +1021,28 @@ files = [
 ]
 
 [[package]]
+name = "regipy"
+version = "4.1.1"
+description = "Python Registry Parser"
+optional = false
+python-versions = "*"
+files = [
+    {file = "regipy-4.1.1-py3-none-any.whl", hash = "sha256:174dada4bedda58e3056a4bd517e13fa1f56e5a27f5f0a11a8fae2f136d6abcb"},
+    {file = "regipy-4.1.1.tar.gz", hash = "sha256:532014352610c0cce9de2d6b5e43a5c80852eddca81edc3bfce55974c95d9a43"},
+]
+
+[package.dependencies]
+attrs = ">=21"
+construct = ">=2.10"
+inflection = ">=0.5.1"
+pytz = "*"
+
+[package.extras]
+cli = ["click (>=7.0.0)", "tabulate"]
+full = ["click (>=7.0.0)", "libfwsi-python (>=20220123)", "tabulate"]
+test = ["pytest", "pytest-flake8"]
+
+[[package]]
 name = "requests"
 version = "2.31.0"
 description = "Python HTTP for Humans."
@@ -1169,4 +1216,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "33be2e1e2f76a52f3c17981d6a39cc3bdf2a223c93d0099f59c7c5d5f9152856"
+content-hash = "7c48e2bbd3b803900ea6b5c1d91c344d2c588a7d3cb1163adc26b318994c6173"
