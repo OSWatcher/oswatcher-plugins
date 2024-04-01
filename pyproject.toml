@@ -30,7 +30,7 @@ regipy = "^4.1.1"
 black = "24.3.0"
 flake8 = "6.0.0"
 isort = "5.11.4"
-mypy = "1.7.0"
+mypy = "1.9.0"
 appdirs-stubs = "^0.1.0"
 types-appdirs = "^1.4.3.1"
 neogit = { path = "../neogit", develop = true }
