@@ -1,7 +1,8 @@
-import urllib
 from binascii import hexlify
 from pathlib import Path
 from typing import Dict
+from urllib import parse as urllib_parse
+from urllib import request as urllib_request
 
 import lief
 from attrs import define
@@ -74,11 +75,11 @@ class SymbolsPlugin(AbstractPlugin):
         filename = PdbRetreiver().retreive_pdb(guid + str(age), file_name=pdb_name, progress_callback=None)
         if not filename:
             raise ValueError("PDB file could not be retrieved from the internet")
-        url = urllib.parse.urlparse(filename, scheme="file")
+        url = urllib_parse.urlparse(filename, scheme="file")
         if url.scheme == "file":
             if not Path(filename).exists():
                 self.logger.error(f"File {filename} does not exists")
-            location = "file:" + urllib.request.pathname2url(Path(filename).absolute())
+            location = "file:" + urllib_request.pathname2url(Path(filename).absolute())
         else:
             location = filename
         return location
