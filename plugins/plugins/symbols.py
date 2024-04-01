@@ -1,16 +1,81 @@
+from __future__ import annotations
+
+import hashlib
 from binascii import hexlify
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Generator
 from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
 import lief
-from attrs import define
+from attrs import define, field
+from neogit.core.merkle import MerkleVisitor
+from neogit.core.model import MerkleLabel, MerkleNode, Node
+from neogit.core.visitor import VisitedNode
 from neogit.model.neo import Commit
 from volatility3.framework.contexts import Context
 from volatility3.framework.symbols.windows.pdbconv import PdbReader, PdbRetreiver
 
 from plugins.types import AbstractPlugin
+
+# enums
+
+
+# define nodes
+@define(auto_attribs=True)
+class EnumMemberNode(Node):
+    name: str = field()
+    value: int = field()
+
+
+@define(auto_attribs=True)
+class EnumNode(Node):
+    enum_name: str = field()
+    enum_data: Dict = field()
+
+    def iter_child_nodes(self) -> Generator[Node, None, None]:
+        for name, value in self.enum_data["constants"].items():
+            yield EnumMemberNode(name=name, value=value)
+
+
+@define(auto_attribs=True)
+class EnumMemberMerkleNode(MerkleNode):
+    """represents an enum member in the graph"""
+
+    name: str = field(kw_only=True)
+    value: int = field(kw_only=True)
+
+
+@define(auto_attribs=True)
+class EnumMerkleNode(MerkleNode):
+    name: str = field(kw_only=True)
+
+
+# define the visitor
+class EnumMerkleVisitor(MerkleVisitor):
+
+    def visit_EnumMemberNode(self, node: EnumMemberNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
+        hash_obj.update(f"{node.name}{node.value}".encode())
+        merkle_node = EnumMemberMerkleNode(
+            hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, name=node.name, value=node.value
+        )
+        return VisitedNode(node, merkle_node)
+
+    def visit_EnumNode(self, node: EnumNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
+        children = {}
+        # ensure sorted by name
+        for child in sorted(node.iter_child_nodes(), key=lambda e: e.name):
+            # yield children
+            visited_node = self.visit(child)
+            merkle_node = visited_node.return_value
+            data = f"{merkle_node.hash}{child.name}{child.value}\n".encode()
+            hash_obj.update(data)
+            children[child.name] = merkle_node
+        # compute final hash
+        merkle_node = EnumMerkleNode(
+            hash=hash_obj.hexdigest(), children=children, label=MerkleLabel.Tree, name=node.enum_name
+        )
+        return VisitedNode(node, merkle_node)
 
 
 def parse_code_view(pe_path):
@@ -60,7 +125,8 @@ class SymbolsPlugin(AbstractPlugin):
                 self.logger.info("GUID: %s, age: %s, PDB: %s", guid, age, pdb_name)
                 try:
                     location = self.retrieve_pdb(guid, age, pdb_name)
-                except ValueError:
+                except Exception:
+                    self.logger.exception("Failed to retrieve PDB on %s", blob_hash)
                     continue
                 self.logger.info(location)
                 ctx = Context()
@@ -85,11 +151,41 @@ class SymbolsPlugin(AbstractPlugin):
         return location
 
     def parse_pdb_json(self, blob_hash: str, j_pdb: Dict):
-        self.insert_enums(blob_hash, j_pdb["enums"])
+        self.parse_enums(blob_hash, j_pdb["enums"])
         self.insert_symbols(blob_hash, j_pdb["symbols"])
 
-    def insert_enums(self, blob_hash: str, j_pdb: Dict):
-        pass
+    def parse_enums(self, blob_hash: str, j_pdb: Dict):
+        with EnumMerkleVisitor() as visitor:
+            for enum_name, enum_data in j_pdb.items():
+                self.logger.info("Enum: %s", enum_name)
+                enum_node = EnumNode(enum_name=enum_name, enum_data=enum_data)
+                visited_node = visitor.visit(enum_node)
+                merkle_node = visited_node.return_value
+                assert isinstance(merkle_node, EnumMerkleNode)
+                self.insert_enum_cypher(merkle_node)
+                self.associate_enum_with_blob(blob_hash, merkle_node)
+
+    def associate_enum_with_blob(self, blob_hash, node: EnumMerkleNode):
+        query = """
+        MATCH (b:Blob {hash: $blob_hash})
+        WITH b
+        MERGE (b)-[:HAS_ENUM]->(e:Enum {hash: $enum_hash, name: $enum_name})
+        """
+        self.neogit.db.cypher_query(query, {"blob_hash": blob_hash, "enum_hash": node.hash, "enum_name": node.name})
+
+    def insert_enum_cypher(self, node: EnumMerkleNode):
+        query = """
+        MERGE (e:Enum {hash: $hash, name: $name})
+        WITH e
+        UNWIND $unwind_param as x
+        MERGE (k:EnumMember {hash: x.hash, name: x.name, value: x.value})
+        MERGE (e)-[:HAS_ENUM_MEMBER]->(k)
+        """
+        unwind_param = [
+            {"hash": child_node.hash, "name": child_name, "value": child_node.value}
+            for child_name, child_node in node.children.items()
+        ]
+        self.neogit.db.cypher_query(query, {"hash": node.hash, "name": node.name, "unwind_param": unwind_param})
 
     def insert_symbols(self, blob_hash: str, symbols: Dict):
         param_list = []
@@ -103,7 +199,7 @@ class SymbolsPlugin(AbstractPlugin):
                     "address": address,
                 }
             )
-            self.logger.debug("Insert %s (%s)", sym, hex(address))
+            self.logger.info("Insert %s (%s)", sym, hex(address))
         query = """
         MATCH (b:Blob {hash: $blob_hash})
         WITH b
