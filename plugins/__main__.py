@@ -9,6 +9,10 @@ from plugins.plugins import MAP_PLUGIN, PluginType
 def setup_logging(debug_enabled: bool):
     level = logging.DEBUG if debug_enabled else logging.INFO
     logging.basicConfig(level=level)
+    logging.getLogger("neo4j").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("volatility3.framework.symbols.windows.pdbconv").setLevel(logging.WARNING)
+    logging.getLogger("volatility3.framework.layers.resources").setLevel(logging.WARNING)
 
 
 @click.command()
