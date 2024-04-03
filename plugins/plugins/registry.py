@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path, PurePath
-from typing import Dict, Generator, Iterator
+from typing import Dict, Iterator
 
 from attrs import define, field
 from neogit.core.merkle import MerkleVisitor
@@ -87,27 +87,20 @@ class WinRegKeyMerkleNode(MerkleNode):
 
 class WinRegMerkleVisitor(MerkleVisitor):
 
-    def visit_WinRegValueNode(
-        self, node: WinRegValueNode, hash_obj: hashlib._Hash, *args, **kwargs
-    ) -> Generator[VisitedNode, None, None]:
+    def visit_WinRegValueNode(self, node: WinRegValueNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
         hash_obj.update(f"{node.value.name}{node.value.value}{node.value.value_type}".encode())
         merkle_node = WinRegValueMerkleNode(hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, value=node.value)
-        yield VisitedNode(node, merkle_node)
+        return VisitedNode(node, merkle_node)
 
-    def visit_WinRegKeyNode(
-        self, node: WinRegKeyNode, hash_obj: hashlib._Hash, *args, **kwargs
-    ) -> Generator[VisitedNode, None, None]:
+    def visit_WinRegKeyNode(self, node: WinRegKeyNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
         merkle_children = {}
         # sort by 2 criterias
         # - keys first
         # - values second
         # then name
         for child_node in sorted(node.iter_child_nodes(), key=lambda e: (not isinstance(e, WinRegKeyNode), e.name)):
-            last_visited = None
-            for visited_node in self.visit(child_node):
-                yield visited_node
-                last_visited = visited_node
-            merkle_node = last_visited.return_value
+            visited_node = self.visit(child_node)
+            merkle_node = visited_node.return_value
             data = f"{child_node.name}{merkle_node.hash}\n".encode()
             hash_obj.update(data)
             # clear out the current merkle node children Dict
@@ -118,7 +111,7 @@ class WinRegMerkleVisitor(MerkleVisitor):
         merkle_node = WinRegKeyMerkleNode(
             hash=hash_obj.hexdigest(), children=merkle_children, label=MerkleLabel.Tree, key=node.key
         )
-        yield VisitedNode(node, merkle_node)
+        return VisitedNode(node, merkle_node)
 
 
 @define(auto_attribs=True)
@@ -134,7 +127,7 @@ class WinRegistryPlugin(AbstractPlugin):
                     node = self.dump_hive(hive_path, hive_local_path)
                     if node is not None:
                         # attach Key to blob
-                        self.attach_root_key_to_blob(blob, node, root_hive.name)
+                        self.attach_root_key_to_blob(blob, node.return_value, root_hive.name)
             except FileNotFoundError:
                 self.logger.warning("Not found: %s", hive_path)
 
@@ -151,26 +144,27 @@ class WinRegistryPlugin(AbstractPlugin):
             self.logger.debug(e)
             return
         root_node = WinRegKeyNode(key=hive.root)
-        visitor = WinRegMerkleVisitor()
-        last_node = None
-        for node in visitor.visit(root_node):
-            if isinstance(node.node, WinRegKeyNode):
-                self.insert_from_visited_node_cypher(node)
-                last_node = node
-        return last_node
+        with WinRegMerkleVisitor(thread=True) as visitor:
+            visitor.run_visit(root_node)
+            last_node = None
+            for node in visitor.as_gen():
+                if isinstance(node.return_value, WinRegKeyMerkleNode):
+                    self.insert_from_visited_node_cypher(node.return_value)
+                    last_node = node
+            return last_node
 
-    def insert_from_visited_node_cypher(self, node: VisitedNode):
+    def insert_from_visited_node_cypher(self, node: WinRegKeyMerkleNode):
         self.create_parent(node)
         self.insert_child_values(node)
         self.insert_child_keys(node)
 
-    def create_parent(self, node: VisitedNode):
+    def create_parent(self, node: WinRegKeyMerkleNode):
         query = """
         MERGE (n:WinRegKey {hash: $hash})
         """
-        self.neogit.db.cypher_query(query, {"hash": node.return_value.hash})
+        self.neogit.db.cypher_query(query, {"hash": node.hash})
 
-    def insert_child_values(self, node: VisitedNode):
+    def insert_child_values(self, node: WinRegKeyMerkleNode):
         """Create child Values"""
         query = """
         MATCH (p:WinRegKey {hash: $parent_hash})
@@ -189,12 +183,12 @@ class WinRegistryPlugin(AbstractPlugin):
                 "value": str(child_node.value.value),
                 "type": child_node.value.value_type,
             }
-            for child_name, child_node in node.return_value.children.items()
+            for child_name, child_node in node.children.items()
             if child_node.label == MerkleLabel.Blob
         ]
-        self.neogit.db.cypher_query(query, {"parent_hash": node.return_value.hash, "unwind_param": unwind_param})
+        self.neogit.db.cypher_query(query, {"parent_hash": node.hash, "unwind_param": unwind_param})
 
-    def insert_child_keys(self, node: VisitedNode):
+    def insert_child_keys(self, node: WinRegKeyMerkleNode):
         """Create child Keys"""
         query = """
         MATCH (p:WinRegKey {hash: $parent_hash})
@@ -208,12 +202,12 @@ class WinRegistryPlugin(AbstractPlugin):
                 "name": child_name,
                 "hash": child_node.hash,
             }
-            for child_name, child_node in node.return_value.children.items()
+            for child_name, child_node in node.children.items()
             if child_node.label == MerkleLabel.Tree
         ]
-        self.neogit.db.cypher_query(query, {"parent_hash": node.return_value.hash, "unwind_param": unwind_param})
+        self.neogit.db.cypher_query(query, {"parent_hash": node.hash, "unwind_param": unwind_param})
 
-    def attach_root_key_to_blob(self, blob: Blob, root_node: VisitedNode, root_name: str):
+    def attach_root_key_to_blob(self, blob: Blob, root_node: WinRegKeyMerkleNode, root_name: str):
         query = """
         MATCH (b:Blob {hash: $blob_hash})
         WITH b
@@ -221,6 +215,4 @@ class WinRegistryPlugin(AbstractPlugin):
         WITH b, k
         MERGE (b)-[:HAS_WINREG_KEY {name: $name}]->(k)
         """
-        self.neogit.db.cypher_query(
-            query, {"blob_hash": blob.hash, "root_hash": root_node.return_value.hash, "name": root_name}
-        )
+        self.neogit.db.cypher_query(query, {"blob_hash": blob.hash, "root_hash": root_node.hash, "name": root_name})
