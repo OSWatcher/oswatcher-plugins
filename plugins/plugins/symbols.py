@@ -305,7 +305,7 @@ class SymbolsPlugin(AbstractPlugin):
     def parse_enums(self, blob_hash: str, j_pdb: Dict):
         with SymbolsMerkleVisitor() as visitor:
             for enum_name, enum_data in sorted(j_pdb.items()):
-                self.logger.info("Enum: %s", enum_name)
+                self.logger.debug("Enum: %s", enum_name)
                 enum_node = EnumNode(enum_name=enum_name, enum_data=enum_data)
                 visited_node = visitor.visit(enum_node)
                 merkle_node = visited_node.return_value
@@ -315,7 +315,7 @@ class SymbolsPlugin(AbstractPlugin):
     def parse_users_types(self, blob_hash: str, j_pdb: Dict):
         with SymbolsMerkleVisitor() as visitor:
             for struct_name, struct_data in sorted(j_pdb.items()):
-                self.logger.info("Struct: %s", struct_name)
+                self.logger.debug("Struct: %s", struct_name)
                 struct_node = WinStructNode(name=struct_name, struct_data=struct_data)
                 visited_node = visitor.visit(struct_node)
                 merkle_node = visited_node.return_value
@@ -382,7 +382,7 @@ class SymbolsPlugin(AbstractPlugin):
                     "address": address,
                 }
             )
-            self.logger.info("Symbol %s (%s)", sym, hex(address))
+            self.logger.debug("Symbol %s (%s)", sym, hex(address))
         query = """
         MATCH (b:Blob {hash: $blob_hash})
         WITH b
