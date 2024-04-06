@@ -175,7 +175,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
             # yield children
             visited_node = self.visit(child)
             merkle_node = visited_node.return_value
-            data = f"{merkle_node.hash}{child.name}{child.value}\n".encode()
+            data = f"{merkle_node.hash}\n".encode()
             hash_obj.update(data)
             children[child.name] = merkle_node
         # compute final hash
