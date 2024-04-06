@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from binascii import hexlify
+from enum import Enum, auto
 from pathlib import Path
-from typing import Dict, Generator
+from typing import Dict, Generator, Optional
 from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
@@ -18,10 +20,8 @@ from volatility3.framework.symbols.windows.pdbconv import PdbReader, PdbRetreive
 
 from plugins.types import AbstractPlugin
 
+
 # enums
-
-
-# define nodes
 @define(auto_attribs=True)
 class EnumMemberNode(Node):
     name: str = field()
@@ -51,8 +51,115 @@ class EnumMerkleNode(MerkleNode):
     name: str = field(kw_only=True)
 
 
+# User Types (structs)
+
+
+class FieldKindType(Enum):
+    Base = auto()
+    Pointer = auto()
+    Enum = auto()
+    Array = auto()
+    Struct = auto()
+    Union = auto()
+    Bitfield = auto()
+
+
+class UserTypeKindType(Enum):
+    Struct = auto()
+    Union = auto()
+
+
+@define(auto_attribs=True)
+class WinStructNode(Node):
+    name: str
+    struct_data: Dict
+    # either struct or union
+    kind: UserTypeKindType = field(init=False)
+    size: int = field(init=False)
+
+    def __attrs_post_init__(self):
+        self.size = self.struct_data["size"]
+        self.kind = UserTypeKindType[self.struct_data["kind"].capitalize()]
+
+    def iter_child_nodes(self) -> Generator[Node, None, None]:
+        # iterate on every field
+        for field_name, field_data in self.struct_data["fields"].items():
+            field_node = WinStructFieldNode(name=field_name, field_data=field_data)
+            yield field_node
+
+
+@define(auto_attribs=True)
+class WinStructFieldNode(Node):
+    name: str = field()
+    field_data: Dict = field()
+    offset: int = field(init=False)
+    type: Dict = field(init=False)
+    kind: FieldKindType = field(init=False)
+    # if array
+    array_counter: Optional[int] = field(init=False)
+    # if bitfield
+    bit_length: Optional[int] = field(init=False)
+    bit_position: Optional[int] = field(init=False)
+    # if pointer or bitfield or array
+    subtype: Optional[Dict] = field(init=False)
+
+    def __attrs_post_init__(self):
+        self.offset = self.field_data["offset"]
+        self.type = self.field_data["type"]
+        self.kind = self.field_data["type"]["kind"]
+        match self.kind:
+            case FieldKindType.Base | FieldKindType.Enum | FieldKindType.Struct | FieldKindType.Union:
+                self.subtype = self.field_data["type"]
+            case FieldKindType.Array:
+                self.array_counter = self.field_data["type"]["count"]
+                self.subtype = self.field_data["type"]["subtype"]
+            case FieldKindType.Bitfield:
+                self.bit_length = self.field_data["type"]["bit_length"]
+                self.bit_position = self.field_data["type"]["bit_position"]
+                self.subtype = self.field_data["type"]["type"]
+            case FieldKindType.Pointer:
+                self.subtype = self.field_data["type"]["subtype"]
+
+    def iter_child_nodes(self) -> Generator[Node, None, None]:
+        # construct the subtype node
+        yield WinDataTypeNode(self.kind, self.subtype)
+
+
+@define(auto_attribs=True)
+class WinDataTypeNode(Node):
+    """Represents basic data types
+    - name: unsigned long
+    - name: unsigned long long
+    - name: void
+    - name: int
+    - name: void
+    """
+
+    kind: FieldKindType = field()
+    subtype: Dict = field()
+
+
+@define(auto_attribs=True)
+class WinDataTypeMerkleNode(MerkleNode):
+    name: str = field(kw_only=True)
+
+
+@define(auto_attribs=True)
+class WinStructFieldMerkleNode(MerkleNode):
+    name: str = field(kw_only=True)
+    offset: int = field(kw_only=True)
+    type: str = field(kw_only=True)
+
+
+@define(auto_attribs=True)
+class WinStructMerkleNode(MerkleNode):
+    name: str = field(kw_only=True)
+    size: int = field(kw_only=True)
+    kind: UserTypeKindType = field(kw_only=True)
+
+
 # define the visitor
-class EnumMerkleVisitor(MerkleVisitor):
+class SymbolsMerkleVisitor(MerkleVisitor):
 
     def visit_EnumMemberNode(self, node: EnumMemberNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
         hash_obj.update(f"{node.name}{node.value}".encode())
@@ -74,6 +181,46 @@ class EnumMerkleVisitor(MerkleVisitor):
         # compute final hash
         merkle_node = EnumMerkleNode(
             hash=hash_obj.hexdigest(), children=children, label=MerkleLabel.Tree, name=node.enum_name
+        )
+        return VisitedNode(node, merkle_node)
+
+    def visit_WinDataTypeNode(self, node: WinDataTypeNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
+        # TODO
+        # match node.kind:
+        #     case FieldKindType.Base | FieldKindType.Enum | FieldKindType.Struct | FieldKindType.Union:
+        #         data = f"{node.kind.name}{node.subtype['name']}".encode()
+        #     case FieldKindType.Pointer:
+        #         data = f"{node.subtype['kind']}{node.subtype['name']}"
+        pass
+
+    def visit_WinStructFieldNode(
+        self, node: WinStructFieldNode, hash_obj: hashlib._Hash, *args, **kwargs
+    ) -> VisitedNode:
+        # merklize the data type
+        # convert type to string for hashing
+        # ensure sorted
+        type_str = json.dumps(node.type, sort_keys=True)
+        hash_obj.update(f"{node.name}{node.offset}{type_str}".encode())
+        merkle_node = WinStructFieldMerkleNode(
+            hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, name=node.name, offset=node.offset, type=type_str
+        )
+        return VisitedNode(node, merkle_node)
+
+    def visit_WinStructNode(self, node: WinStructNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
+        children = {}
+        for member in node.iter_child_nodes():
+            visited_node = self.visit(member)
+            merkle_node = visited_node.return_value
+            data = f"{merkle_node.hash}\n".encode()
+            hash_obj.update(data)
+            children[member.name] = merkle_node
+        merkle_node = WinStructMerkleNode(
+            hash=hash_obj.hexdigest(),
+            children=children,
+            label=MerkleLabel.Tree,
+            name=node.name,
+            size=node.size,
+            kind=node.kind,
         )
         return VisitedNode(node, merkle_node)
 
@@ -153,9 +300,10 @@ class SymbolsPlugin(AbstractPlugin):
     def parse_pdb_json(self, blob_hash: str, j_pdb: Dict):
         self.parse_enums(blob_hash, j_pdb["enums"])
         self.insert_symbols(blob_hash, j_pdb["symbols"])
+        self.parse_users_types(blob_hash, j_pdb["user_types"])
 
     def parse_enums(self, blob_hash: str, j_pdb: Dict):
-        with EnumMerkleVisitor() as visitor:
+        with SymbolsMerkleVisitor() as visitor:
             for enum_name, enum_data in j_pdb.items():
                 self.logger.info("Enum: %s", enum_name)
                 enum_node = EnumNode(enum_name=enum_name, enum_data=enum_data)
@@ -165,6 +313,17 @@ class SymbolsPlugin(AbstractPlugin):
                 self.insert_enum_cypher(merkle_node)
                 self.associate_enum_with_blob(blob_hash, merkle_node)
 
+    def parse_users_types(self, blob_hash: str, j_pdb: Dict):
+        with SymbolsMerkleVisitor() as visitor:
+            for struct_name, struct_data in j_pdb.items():
+                self.logger.info("Struct: %s", struct_name)
+                struct_node = WinStructNode(name=struct_name, struct_data=struct_data)
+                visited_node = visitor.visit(struct_node)
+                merkle_node = visited_node.return_value
+                assert isinstance(visited_node.return_value, WinStructMerkleNode)
+                # self.insert_struct_cypher(merkle_node)
+                # self.associate_struct_with_blob(blob_hash, merkle_node)
+
     def associate_enum_with_blob(self, blob_hash, node: EnumMerkleNode):
         query = """
         MATCH (b:Blob {hash: $blob_hash})
@@ -173,7 +332,16 @@ class SymbolsPlugin(AbstractPlugin):
         """
         self.neogit.db.cypher_query(query, {"blob_hash": blob_hash, "enum_hash": node.hash, "enum_name": node.name})
 
-    def insert_enum_cypher(self, node: EnumMerkleNode):
+    def associate_struct_with_blob(self, blob_hash, node: VisitedNode):
+        query = """
+        MATCH (b:Blob {hash: $blob_hash})
+        WITH b
+        MATCH (s:WinStruct {hash: $struct_hash})
+        MERGE (b)-[:HAS_STRUCT]->(s)
+        """
+        self.neogit.db.cypher_query(query, {"blob_hash": blob_hash, "struct_hash": node.return_value.hash})
+
+    def insert_enum_cypher(self, node: VisitedNode):
         query = """
         MERGE (e:Enum {hash: $hash, name: $name})
         WITH e
@@ -187,6 +355,9 @@ class SymbolsPlugin(AbstractPlugin):
         ]
         self.neogit.db.cypher_query(query, {"hash": node.hash, "name": node.name, "unwind_param": unwind_param})
 
+    def insert_struct_cypher(self, node: WinStructMerkleNode):
+        pass
+
     def insert_symbols(self, blob_hash: str, symbols: Dict):
         param_list = []
         for sym, value in symbols.items():
@@ -199,7 +370,7 @@ class SymbolsPlugin(AbstractPlugin):
                     "address": address,
                 }
             )
-            self.logger.info("Insert %s (%s)", sym, hex(address))
+            self.logger.info("Symbol %s (%s)", sym, hex(address))
         query = """
         MATCH (b:Blob {hash: $blob_hash})
         WITH b
