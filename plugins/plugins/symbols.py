@@ -299,12 +299,12 @@ class SymbolsPlugin(AbstractPlugin):
 
     def parse_pdb_json(self, blob_hash: str, j_pdb: Dict):
         self.parse_enums(blob_hash, j_pdb["enums"])
-        # self.insert_symbols(blob_hash, j_pdb["symbols"])
+        self.insert_symbols(blob_hash, j_pdb["symbols"])
         self.parse_users_types(blob_hash, j_pdb["user_types"])
 
     def parse_enums(self, blob_hash: str, j_pdb: Dict):
         with SymbolsMerkleVisitor() as visitor:
-            for enum_name, enum_data in j_pdb.items():
+            for enum_name, enum_data in sorted(j_pdb.items()):
                 self.logger.info("Enum: %s", enum_name)
                 enum_node = EnumNode(enum_name=enum_name, enum_data=enum_data)
                 visited_node = visitor.visit(enum_node)
@@ -315,7 +315,7 @@ class SymbolsPlugin(AbstractPlugin):
 
     def parse_users_types(self, blob_hash: str, j_pdb: Dict):
         with SymbolsMerkleVisitor() as visitor:
-            for struct_name, struct_data in j_pdb.items():
+            for struct_name, struct_data in sorted(j_pdb.items()):
                 self.logger.info("Struct: %s", struct_name)
                 struct_node = WinStructNode(name=struct_name, struct_data=struct_data)
                 visited_node = visitor.visit(struct_node)
@@ -381,7 +381,7 @@ class SymbolsPlugin(AbstractPlugin):
 
     def insert_symbols(self, blob_hash: str, symbols: Dict):
         param_list = []
-        for sym, value in symbols.items():
+        for sym, value in sorted(symbols.items()):
             if sym.startswith("?") or sym.startswith("$"):
                 continue
             address = value["address"]
