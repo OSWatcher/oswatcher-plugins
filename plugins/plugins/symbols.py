@@ -299,7 +299,7 @@ class SymbolsPlugin(AbstractPlugin):
 
     def parse_pdb_json(self, blob_hash: str, j_pdb: Dict):
         self.parse_enums(blob_hash, j_pdb["enums"])
-        self.insert_symbols(blob_hash, j_pdb["symbols"])
+        # self.insert_symbols(blob_hash, j_pdb["symbols"])
         self.parse_users_types(blob_hash, j_pdb["user_types"])
 
     def parse_enums(self, blob_hash: str, j_pdb: Dict):
@@ -321,8 +321,8 @@ class SymbolsPlugin(AbstractPlugin):
                 visited_node = visitor.visit(struct_node)
                 merkle_node = visited_node.return_value
                 assert isinstance(visited_node.return_value, WinStructMerkleNode)
-                # self.insert_struct_cypher(merkle_node)
-                # self.associate_struct_with_blob(blob_hash, merkle_node)
+                self.insert_struct_cypher(merkle_node)
+                self.associate_struct_with_blob(blob_hash, merkle_node)
 
     def associate_enum_with_blob(self, blob_hash, node: EnumMerkleNode):
         query = """
@@ -331,15 +331,6 @@ class SymbolsPlugin(AbstractPlugin):
         MERGE (b)-[:HAS_ENUM]->(e:Enum {hash: $enum_hash, name: $enum_name})
         """
         self.neogit.db.cypher_query(query, {"blob_hash": blob_hash, "enum_hash": node.hash, "enum_name": node.name})
-
-    def associate_struct_with_blob(self, blob_hash, node: VisitedNode):
-        query = """
-        MATCH (b:Blob {hash: $blob_hash})
-        WITH b
-        MATCH (s:WinStruct {hash: $struct_hash})
-        MERGE (b)-[:HAS_STRUCT]->(s)
-        """
-        self.neogit.db.cypher_query(query, {"blob_hash": blob_hash, "struct_hash": node.return_value.hash})
 
     def insert_enum_cypher(self, node: VisitedNode):
         query = """
@@ -356,7 +347,37 @@ class SymbolsPlugin(AbstractPlugin):
         self.neogit.db.cypher_query(query, {"hash": node.hash, "name": node.name, "unwind_param": unwind_param})
 
     def insert_struct_cypher(self, node: WinStructMerkleNode):
-        pass
+        query = """
+        MERGE (s:WinStruct {hash: $hash, name: $name, size: $size, kind: $kind})
+        WITH s
+        UNWIND $unwind_param as x
+        MERGE (f:WinStructField {hash: x.hash, name: x.name, offset: x.offset, type: x.type})
+        MERGE (s)-[:HAS_FIELD]->(f)
+        """
+        unwind_param = [
+            {"hash": child_node.hash, "name": child_name, "offset": child_node.offset, "type": child_node.type}
+            for child_name, child_node in node.children.items()
+        ]
+        self.neogit.db.cypher_query(
+            query,
+            {
+                "blob_hash": node.hash,
+                "unwind_param": unwind_param,
+                "hash": node.hash,
+                "name": node.name,
+                "size": node.size,
+                "kind": node.kind.name,
+            },
+        )
+
+    def associate_struct_with_blob(self, blob_hash, node: WinStructMerkleNode):
+        query = """
+        MATCH (b:Blob {hash: $blob_hash})
+        WITH b
+        MATCH (s:WinStruct {hash: $struct_hash})
+        MERGE (b)-[:HAS_STRUCT]->(s)
+        """
+        self.neogit.db.cypher_query(query, {"blob_hash": blob_hash, "struct_hash": node.hash})
 
     def insert_symbols(self, blob_hash: str, symbols: Dict):
         param_list = []
