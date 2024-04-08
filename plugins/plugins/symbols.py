@@ -18,7 +18,7 @@ from neogit.model.neo import Commit
 from volatility3.framework.contexts import Context
 from volatility3.framework.symbols.windows.pdbconv import PdbReader, PdbRetreiver
 
-from plugins.types import AbstractPlugin
+from plugins.types import AbstractPlugin, UniqueConstraint
 
 
 # enums
@@ -254,6 +254,15 @@ class SymbolsPlugin(AbstractPlugin):
 
     PE_MIME_TYPE = "application/vnd.microsoft.portable-executable"
 
+    def constraints_data(self) -> lief.List[UniqueConstraint]:
+        return [
+            UniqueConstraint(label="Enum", property_list=["hash"]),
+            UniqueConstraint(label="EnumMember", property_list=["hash"]),
+            UniqueConstraint(label="Symbol", property_list=["name"]),
+            UniqueConstraint(label="WinStruct", property_list=["hash"]),
+            UniqueConstraint(label="WinStructField", property_list=["hash"]),
+        ]
+
     def run(self, commit: Commit):
         # identify every PE file Blob
         query = """
@@ -269,13 +278,13 @@ class SymbolsPlugin(AbstractPlugin):
                 if not ret:
                     continue
                 guid, age, pdb_name = ret
-                self.logger.info("GUID: %s, age: %s, PDB: %s", guid, age, pdb_name)
+                self.logger.info("PDB: %s - GUID: %s (%s)", pdb_name, guid, age)
                 try:
                     location = self.retrieve_pdb(guid, age, pdb_name)
                 except Exception:
                     self.logger.exception("Failed to retrieve PDB on %s", blob_hash)
                     continue
-                self.logger.info(location)
+                self.logger.debug(location)
                 ctx = Context()
                 try:
                     j_data = PdbReader(ctx, location).get_json()
@@ -298,11 +307,12 @@ class SymbolsPlugin(AbstractPlugin):
         return location
 
     def parse_pdb_json(self, blob_hash: str, j_pdb: Dict):
-        self.parse_enums(blob_hash, j_pdb["enums"])
-        self.insert_symbols(blob_hash, j_pdb["symbols"])
-        self.parse_users_types(blob_hash, j_pdb["user_types"])
+        count_enum = self.parse_enums(blob_hash, j_pdb["enums"])
+        count_syms = self.insert_symbols(blob_hash, j_pdb["symbols"])
+        count_types = self.parse_users_types(blob_hash, j_pdb["user_types"])
+        self.logger.info("Inserted %d enums, %d symbols, %d user types", count_enum, count_syms, count_types)
 
-    def parse_enums(self, blob_hash: str, j_pdb: Dict):
+    def parse_enums(self, blob_hash: str, j_pdb: Dict) -> int:
         with SymbolsMerkleVisitor() as visitor:
             for enum_name, enum_data in sorted(j_pdb.items()):
                 self.logger.debug("Enum: %s", enum_name)
@@ -311,8 +321,9 @@ class SymbolsPlugin(AbstractPlugin):
                 merkle_node = visited_node.return_value
                 assert isinstance(merkle_node, EnumMerkleNode)
                 self.insert_enum_cypher(blob_hash, merkle_node)
+        return len(j_pdb.items())
 
-    def parse_users_types(self, blob_hash: str, j_pdb: Dict):
+    def parse_users_types(self, blob_hash: str, j_pdb: Dict) -> int:
         with SymbolsMerkleVisitor() as visitor:
             for struct_name, struct_data in sorted(j_pdb.items()):
                 self.logger.debug("Struct: %s", struct_name)
@@ -321,6 +332,7 @@ class SymbolsPlugin(AbstractPlugin):
                 merkle_node = visited_node.return_value
                 assert isinstance(visited_node.return_value, WinStructMerkleNode)
                 self.insert_struct_cypher(blob_hash, merkle_node)
+        return len(j_pdb.items())
 
     def insert_enum_cypher(self, blob_hash: str, node: EnumMerkleNode):
         query = """
@@ -370,7 +382,7 @@ class SymbolsPlugin(AbstractPlugin):
             },
         )
 
-    def insert_symbols(self, blob_hash: str, symbols: Dict):
+    def insert_symbols(self, blob_hash: str, symbols: Dict) -> int:
         param_list = []
         for sym, value in sorted(symbols.items()):
             if sym.startswith("?") or sym.startswith("$"):
@@ -391,3 +403,4 @@ class SymbolsPlugin(AbstractPlugin):
         MERGE (b)-[:HAS_SYMBOL {address: p.address}]->(s)
         """
         self.neogit.db.cypher_query(query, {"blob_hash": blob_hash, "unwind": param_list})
+        return len(symbols.items())
