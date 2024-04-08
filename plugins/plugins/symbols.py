@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import os
 from binascii import hexlify
 from enum import Enum, auto
 from pathlib import Path
-from typing import Dict, Generator, Optional
+from typing import Dict, Generator, Optional, Self
 from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
@@ -17,6 +19,7 @@ from neogit.core.visitor import VisitedNode
 from neogit.model.neo import Commit
 from volatility3.framework.contexts import Context
 from volatility3.framework.symbols.windows.pdbconv import PdbReader, PdbRetreiver
+from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 from plugins.types import AbstractPlugin, UniqueConstraint
 
@@ -251,8 +254,18 @@ def parse_code_view(pe_path):
 
 @define(auto_attribs=True)
 class SymbolsPlugin(AbstractPlugin):
+    pool: ProcessPoolExecutor = field(init=False)
+    max_workers: int = field(init=False, default=1)
+    future_to_blob: Dict[Future, str] = field(init=False, default={})
+
+    def __attrs_post_init__(self):
+        self.pool = ProcessPoolExecutor(max_workers=self.max_workers)
 
     PE_MIME_TYPE = "application/vnd.microsoft.portable-executable"
+
+    def safe_enter(self) -> Self:
+        self.pool = self.ex.enter_context(self.pool)
+        return self
 
     def constraints_data(self) -> lief.List[UniqueConstraint]:
         return [
@@ -275,33 +288,53 @@ class SymbolsPlugin(AbstractPlugin):
         for row in rows:
             blob_hash = row[0]
             with self.downloaded_file(blob_hash) as local_file:
+                while len(self.future_to_blob) >= self.max_workers:
+                    for future in as_completed(self.future_to_blob):
+                        del self.future_to_blob[future]
                 ret = parse_code_view(local_file)
                 if not ret:
                     continue
                 guid, age, pdb_name = ret
                 self.logger.info("PDB: %s - GUID: %s (%s)", pdb_name, guid, age)
-                try:
-                    location = self.retrieve_pdb(guid, age, pdb_name)
-                except Exception:
-                    self.logger.exception("Failed to retrieve PDB on %s", blob_hash)
-                    continue
-                self.logger.debug(location)
-                ctx = Context()
-                try:
-                    j_data = PdbReader(ctx, location).get_json()
-                except Exception:
-                    self.logger.exception("Failed to parse PDB on %s", blob_hash)
-                    continue
-                self.parse_pdb_json(blob_hash, j_data)
+                future = self.pool.submit(self.process_pdb, blob_hash, guid, age, pdb_name)
+                future.add_done_callback(self.process_results)
+                self.future_to_blob[future] = blob_hash
 
-    def retrieve_pdb(self, guid, age, pdb_name) -> str:
+    @staticmethod
+    def process_pdb(blob_hash, guid, age, pdb_name):
+        try:
+            location = SymbolsPlugin.retrieve_pdb(guid, age, pdb_name)
+        except Exception as e:
+            logging.error("Failed to retrieve PDB on %s", blob_hash)
+            raise ValueError("Failed to retrieve PDB on %s", blob_hash) from e
+        logging.debug(location)
+        ctx = Context()
+        try:
+            j_data = PdbReader(ctx, location).get_json()
+        except Exception as e:
+            logging.error("Failed to parse PDB on %s", blob_hash)
+            raise ValueError("Failed to parse PDB on %s", blob_hash) from e
+        return j_data
+
+    def process_results(self, future: Future):
+        self.logger.info("Process results")
+        try:
+            j_data = future.result()
+        except Exception as e:
+            self.logger.error("Failed to process PDB: %s", e)
+        else:
+            blob_hash = self.future_to_blob[future]
+            self.parse_pdb_json(blob_hash, j_data)
+
+    @staticmethod
+    def retrieve_pdb(guid, age, pdb_name) -> str:
         filename = PdbRetreiver().retreive_pdb(guid + str(age), file_name=pdb_name, progress_callback=None)
         if not filename:
             raise ValueError("PDB file could not be retrieved from the internet")
         url = urllib_parse.urlparse(filename, scheme="file")
         if url.scheme == "file":
             if not Path(filename).exists():
-                self.logger.error(f"File {filename} does not exists")
+                logging.error(f"File {filename} does not exists")
             location = "file:" + urllib_request.pathname2url(Path(filename).absolute())
         else:
             location = filename
