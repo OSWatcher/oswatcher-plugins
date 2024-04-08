@@ -4,11 +4,12 @@ import logging
 import tempfile
 from abc import abstractmethod
 from contextlib import contextmanager
-from typing import Any, List
+from typing import Any, List, Self
 
 from attrs import Factory, define, field
 from neogit.model.neo import Commit
 from neogit.service import Neogit
+from neogit.utils import BetterContextManager
 
 
 @define(auto_attribs=True)
@@ -18,7 +19,7 @@ class UniqueConstraint:
 
 
 @define(auto_attribs=True)
-class AbstractPlugin:
+class AbstractPlugin(BetterContextManager):
     logger: logging.Logger = field(
         init=False,
         default=Factory(
