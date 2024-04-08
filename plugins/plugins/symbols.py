@@ -265,12 +265,13 @@ class SymbolsPlugin(AbstractPlugin):
 
     def run(self, commit: Commit):
         # identify every PE file Blob
+        fs = commit.filesystem.single()
         query = """
-        MATCH (b:Blob)-[:HAS_MIME_TYPE]->(m:MimeType)
-        WHERE m.mime = $mime_type
+        MATCH (r:Tree)-[:HAS_CHILD_TREE|HAS_CHILD_BLOB*]->(b:Blob)-[:HAS_MIME_TYPE]->(m:MimeType)
+        WHERE m.mime = $mime_type AND r.hash = $root_hash
         RETURN b.hash
         """
-        rows, _ = self.neogit.db.cypher_query(query, {"mime_type": self.__class__.PE_MIME_TYPE})
+        rows, _ = self.neogit.db.cypher_query(query, {"mime_type": self.__class__.PE_MIME_TYPE, "root_hash": fs.hash})
         for row in rows:
             blob_hash = row[0]
             with self.downloaded_file(blob_hash) as local_file:
