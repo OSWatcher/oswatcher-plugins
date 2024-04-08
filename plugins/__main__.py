@@ -39,6 +39,6 @@ def runner(debug, commit_hash: str, plugin_type_str: str):
     commit = Commit.nodes.get(hash=commit_hash)
 
     # instantiate plugin
-    plugin = plugin_cls()
-    # __call__
-    plugin(commit)
+    with plugin_cls() as plugin:
+        # __call__
+        plugin(commit)
