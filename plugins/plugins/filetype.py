@@ -1,15 +1,21 @@
 import tempfile
 from io import BytesIO
+from typing import List
 
 import magic
 from attrs import define
 from neogit.model.neo import Commit
 
-from plugins.types import AbstractPlugin
+from plugins.types import AbstractPlugin, UniqueConstraint
 
 
 @define(auto_attribs=True)
 class FileTypePlugin(AbstractPlugin):
+
+    def constraints_data(self) -> List[UniqueConstraint]:
+        return [
+            UniqueConstraint(label="MimeType", property_list=["mime"]),
+        ]
 
     def run(self, commit: Commit):
         fs = commit.filesystem.single()
