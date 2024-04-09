@@ -25,6 +25,7 @@ lief = "0.13.2"
 volatility3 = "^2.5.2"
 regipy = "^4.1.1"
 jsonschema = "^4.21.1"
+pypeln = "^0.4.9"
 
 
 [tool.poetry.group.dev.dependencies]

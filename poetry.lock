@@ -971,6 +971,20 @@ plugins = ["importlib-metadata"]
 windows-terminal = ["colorama (>=0.4.6)"]
 
 [[package]]
+name = "pypeln"
+version = "0.4.9"
+description = ""
+optional = false
+python-versions = ">=3.6.2,<4.0"
+files = [
+    {file = "pypeln-0.4.9-py3-none-any.whl", hash = "sha256:38d108419fcf8c6127a1fe4465978a98ea4017262dd3ab07185d5cfdae8bf780"},
+    {file = "pypeln-0.4.9.tar.gz", hash = "sha256:01c1acc1b2307895107980d3216288898cf94ebe328e4888b93dead654211da5"},
+]
+
+[package.dependencies]
+stopit = ">=1.1.2,<2.0.0"
+
+[[package]]
 name = "pyreadline3"
 version = "3.4.1"
 description = "A python implementation of GNU readline."
@@ -1278,6 +1292,16 @@ pure-eval = "*"
 tests = ["cython", "littleutils", "pygments", "pytest", "typeguard"]
 
 [[package]]
+name = "stopit"
+version = "1.1.2"
+description = "Timeout control decorator and context managers, raise any exception in another thread"
+optional = false
+python-versions = "*"
+files = [
+    {file = "stopit-1.1.2.tar.gz", hash = "sha256:f7f39c583fd92027bd9d06127b259aee7a5b7945c1f1fa56263811e1e766996d"},
+]
+
+[[package]]
 name = "tomli"
 version = "2.0.1"
 description = "A lil' TOML parser"
@@ -1381,4 +1405,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "3855c228e8d23a0a6d1e0478c1265e59daf6f5676d12f386180434820f166d83"
+content-hash = "b6b12f9d27dc3bc3a32715dae392108baec08e143bed734b1cf3a9ae8e6d0c09"
