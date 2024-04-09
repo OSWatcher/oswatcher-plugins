@@ -1,17 +1,21 @@
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import logging
 import os
+import tempfile
 from binascii import hexlify
+from contextlib import contextmanager
 from enum import Enum, auto
 from pathlib import Path
-from typing import Dict, Generator, Optional, Self
+from typing import Dict, Generator, Optional, Tuple
 from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
 import lief
+import pypeln as pl
 from attrs import define, field
 from neogit.core.merkle import MerkleVisitor
 from neogit.core.model import MerkleLabel, MerkleNode, Node
@@ -19,9 +23,29 @@ from neogit.core.visitor import VisitedNode
 from neogit.model.neo import Commit
 from volatility3.framework.contexts import Context
 from volatility3.framework.symbols.windows.pdbconv import PdbReader, PdbRetreiver
-from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 from plugins.types import AbstractPlugin, UniqueConstraint
+
+
+@contextmanager
+def temporary_file_context(path):
+    try:
+        yield path
+    finally:
+        os.remove(path)
+
+
+def return_exceptions(f):
+    @functools.wraps(f)
+    def wrapped(self, x):
+        if isinstance(x, BaseException):
+            return x
+        try:
+            return f(self, x)
+        except BaseException as e:
+            return e
+
+    return wrapped
 
 
 # enums
@@ -252,20 +276,25 @@ def parse_code_view(pe_path):
             return guid, code_view.age & 0xF, code_view.filename
 
 
+def retrieve_pdb(guid, age, pdb_name) -> str:
+    filename = PdbRetreiver().retreive_pdb(guid + str(age), file_name=pdb_name, progress_callback=None)
+    if not filename:
+        raise ValueError("PDB file could not be retrieved from the internet")
+    url = urllib_parse.urlparse(filename, scheme="file")
+    if url.scheme == "file":
+        if not Path(filename).exists():
+            logging.error(f"File {filename} does not exists")
+        location = "file:" + urllib_request.pathname2url(Path(filename).absolute())
+    else:
+        location = filename
+    return location
+
+
 @define(auto_attribs=True)
 class SymbolsPlugin(AbstractPlugin):
-    pool: ProcessPoolExecutor = field(init=False)
-    max_workers: int = field(init=False, default=1)
-    future_to_blob: Dict[Future, str] = field(init=False, default={})
-
-    def __attrs_post_init__(self):
-        self.pool = ProcessPoolExecutor(max_workers=self.max_workers)
+    max_workers: int = field(init=False, default=os.cpu_count())
 
     PE_MIME_TYPE = "application/vnd.microsoft.portable-executable"
-
-    def safe_enter(self) -> Self:
-        self.pool = self.ex.enter_context(self.pool)
-        return self
 
     def constraints_data(self) -> lief.List[UniqueConstraint]:
         return [
@@ -285,66 +314,53 @@ class SymbolsPlugin(AbstractPlugin):
         RETURN b.hash
         """
         rows, _ = self.neogit.db.cypher_query(query, {"mime_type": self.__class__.PE_MIME_TYPE, "root_hash": fs.hash})
-        for row in rows:
-            blob_hash = row[0]
-            with self.downloaded_file(blob_hash) as local_file:
-                while len(self.future_to_blob) >= self.max_workers:
-                    for future in as_completed(self.future_to_blob):
-                        del self.future_to_blob[future]
-                ret = parse_code_view(local_file)
-                if not ret:
-                    continue
-                guid, age, pdb_name = ret
-                self.logger.info("PDB: %s - GUID: %s (%s)", pdb_name, guid, age)
-                future = self.pool.submit(self.process_pdb, blob_hash, guid, age, pdb_name)
-                future.add_done_callback(self.process_results)
-                self.future_to_blob[future] = blob_hash
+        blob_hashes = (row[0] for row in rows)
+        stage = pl.process.map(self.stage_parse_code_view, blob_hashes, workers=4)
+        stage = pl.process.map(self.stage_process_pdb, stage, workers=self.max_workers, maxsize=self.max_workers)
+        for ret in stage:
+            if isinstance(ret, BaseException):
+                # self.logger.error("Failed to handle PDB: %s", ret)
+                continue
+            blob_hash, pdb_name, tmp_file = ret
+            with temporary_file_context(tmp_file) as tmp_file:
+                with open(tmp_file, "r") as f:
+                    j_data = json.load(f)
+            self.parse_pdb_json(blob_hash, pdb_name, j_data)
 
-    @staticmethod
-    def process_pdb(blob_hash, guid, age, pdb_name):
+    @return_exceptions
+    def stage_parse_code_view(self, blob_hash: str) -> Optional[Tuple[str, int, str]]:
+        with self.downloaded_file(blob_hash) as local_file:
+            ret = parse_code_view(local_file)
+            if not ret:
+                raise ValueError("No CodeView found")
+            guid, age, pdb_name = ret
+            self.logger.info("PDB: %s - GUID: %s (%s)", pdb_name, guid, age)
+            return blob_hash, *ret
+
+    @return_exceptions
+    def stage_process_pdb(self, arg) -> Tuple[str, Path]:
+        blob_hash, guid, age, pdb_name = arg
         try:
-            location = SymbolsPlugin.retrieve_pdb(guid, age, pdb_name)
+            location = retrieve_pdb(guid, age, pdb_name)
         except Exception as e:
-            logging.error("Failed to retrieve PDB on %s", blob_hash)
-            raise ValueError("Failed to retrieve PDB on %s", blob_hash) from e
+            raise ValueError("Failed to retrieve PDB %s on %s", pdb_name, blob_hash) from e
         logging.debug(location)
         ctx = Context()
         try:
             j_data = PdbReader(ctx, location).get_json()
         except Exception as e:
-            logging.error("Failed to parse PDB on %s", blob_hash)
-            raise ValueError("Failed to parse PDB on %s", blob_hash) from e
-        return j_data
+            raise ValueError("Failed to parse PDB %s on %s", pdb_name, blob_hash) from e
+        with tempfile.NamedTemporaryFile(delete=False, mode="w+") as tmp_file:
+            json.dump(j_data, tmp_file)
+            return blob_hash, pdb_name, Path(tmp_file.name)
 
-    def process_results(self, future: Future):
-        self.logger.info("Process results")
-        try:
-            j_data = future.result()
-        except Exception as e:
-            self.logger.error("Failed to process PDB: %s", e)
-        else:
-            blob_hash = self.future_to_blob[future]
-            self.parse_pdb_json(blob_hash, j_data)
-
-    @staticmethod
-    def retrieve_pdb(guid, age, pdb_name) -> str:
-        filename = PdbRetreiver().retreive_pdb(guid + str(age), file_name=pdb_name, progress_callback=None)
-        if not filename:
-            raise ValueError("PDB file could not be retrieved from the internet")
-        url = urllib_parse.urlparse(filename, scheme="file")
-        if url.scheme == "file":
-            if not Path(filename).exists():
-                logging.error(f"File {filename} does not exists")
-            location = "file:" + urllib_request.pathname2url(Path(filename).absolute())
-        else:
-            location = filename
-        return location
-
-    def parse_pdb_json(self, blob_hash: str, j_pdb: Dict):
+    def parse_pdb_json(self, blob_hash: str, pdb_name: str, j_pdb: Dict):
         count_enum = self.parse_enums(blob_hash, j_pdb["enums"])
         count_syms = self.insert_symbols(blob_hash, j_pdb["symbols"])
         count_types = self.parse_users_types(blob_hash, j_pdb["user_types"])
-        self.logger.info("Inserted %d enums, %d symbols, %d user types", count_enum, count_syms, count_types)
+        self.logger.info(
+            "PDB: %s - Inserted %d enums, %d symbols, %d user types", pdb_name, count_enum, count_syms, count_types
+        )
 
     def parse_enums(self, blob_hash: str, j_pdb: Dict) -> int:
         with SymbolsMerkleVisitor() as visitor:
