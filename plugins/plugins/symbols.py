@@ -205,6 +205,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
             data = f"{merkle_node.hash}\n".encode()
             hash_obj.update(data)
             children[child.name] = merkle_node
+        hash_obj.update(f"{node.enum_name}".encode())
         # compute final hash
         merkle_node = EnumMerkleNode(
             hash=hash_obj.hexdigest(), children=children, label=MerkleLabel.Tree, name=node.enum_name
