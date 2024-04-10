@@ -244,6 +244,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
             data = f"{merkle_node.hash}\n".encode()
             hash_obj.update(data)
             children[member.name] = merkle_node
+        hash_obj.update(f"{node.name}-{node.size}-{node.kind.name}".encode())
         merkle_node = WinStructMerkleNode(
             hash=hash_obj.hexdigest(),
             children=children,
