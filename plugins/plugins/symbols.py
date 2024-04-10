@@ -189,7 +189,7 @@ class WinStructMerkleNode(MerkleNode):
 class SymbolsMerkleVisitor(MerkleVisitor):
 
     def visit_EnumMemberNode(self, node: EnumMemberNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
-        hash_obj.update(f"{node.name}{node.value}".encode())
+        hash_obj.update(f"{node.name}-{node.value}".encode())
         merkle_node = EnumMemberMerkleNode(
             hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, name=node.name, value=node.value
         )
@@ -227,7 +227,10 @@ class SymbolsMerkleVisitor(MerkleVisitor):
         # convert type to string for hashing
         # ensure sorted
         type_str = json.dumps(node.type, sort_keys=True)
-        hash_obj.update(f"{node.name}{node.offset}{type_str}".encode())
+        # need separator to distinguish between
+        # "Reserved" "10" "xxx"
+        # "Reserved1 "0" "xxx"
+        hash_obj.update(f"{node.name}-{node.offset}-{type_str}".encode())
         merkle_node = WinStructFieldMerkleNode(
             hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, name=node.name, offset=node.offset, type=type_str
         )
