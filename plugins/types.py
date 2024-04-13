@@ -4,7 +4,7 @@ import logging
 import tempfile
 from abc import abstractmethod
 from contextlib import contextmanager
-from typing import Any, List, Self
+from typing import Any, List
 
 from attrs import Factory, define, field
 from neogit.model.neo import Commit
