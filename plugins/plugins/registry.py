@@ -10,7 +10,7 @@ from neogit.core.model import MerkleLabel, MerkleNode, Node
 from neogit.core.visitor import VisitedNode
 from neogit.model.merkle import Blob
 from neogit.model.neo import Commit, Tree
-from regipy import RegistryHive, Subkey, Value
+from regipy import NKRecord, RegistryHive, Subkey, Value
 
 from plugins.types import AbstractPlugin, UniqueConstraint
 
@@ -44,25 +44,29 @@ HIVE_MAPPING: Dict[PurePath, PurePath] = {
 
 @define(auto_attribs=True)
 class CommonWinRegNode(Node):
+    path: PurePath = field()
 
     @property
     def name(self) -> str:
         raise NotImplementedError
 
+    @property
+    def fullpath(self) -> PurePath:
+        return self.path / self.name
+
 
 @define(auto_attribs=True)
 class WinRegValueNode(CommonWinRegNode):
-    value: Value
+    value: Value = field()
 
     @property
     def name(self) -> str:
         return self.value.name
 
 
+@define(auto_attribs=True)
 class WinRegKeyNode(CommonWinRegNode):
-
-    def __init__(self, key: Subkey):
-        self.key = key
+    key: NKRecord = field()
 
     @property
     def name(self) -> str:
@@ -70,9 +74,10 @@ class WinRegKeyNode(CommonWinRegNode):
 
     def iter_child_nodes(self) -> Iterator[Node]:
         for sub_key in self.key.iter_subkeys():
-            yield WinRegKeyNode(sub_key)
+            subkey_node = WinRegKeyNode(self.fullpath, sub_key)
+            yield subkey_node
             for value in sub_key.iter_values():
-                yield WinRegValueNode(value)
+                yield WinRegValueNode(subkey_node.fullpath, value)
 
 
 @define(auto_attribs=True)
@@ -88,6 +93,7 @@ class WinRegKeyMerkleNode(MerkleNode):
 class WinRegMerkleVisitor(MerkleVisitor):
 
     def visit_WinRegValueNode(self, node: WinRegValueNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
+        self.logger.debug("Visiting %s", node.fullpath)
         hash_obj.update(f"{node.value.name}{node.value.value}{node.value.value_type}".encode())
         merkle_node = WinRegValueMerkleNode(hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, value=node.value)
         return VisitedNode(node, merkle_node)
@@ -130,14 +136,14 @@ class WinRegistryPlugin(AbstractPlugin):
                 blob = fs.get_blob_at_path(hive_path)
                 with self.downloaded_file(blob.hash) as hive_local_path:
                     self.logger.info("Dumping %s", hive_path)
-                    node = self.dump_hive(hive_path, hive_local_path)
+                    node = self.dump_hive(hive_path, hive_local_path, root_hive)
                     if node is not None:
                         # attach Key to blob
                         self.attach_root_key_to_blob(blob, node.return_value, root_hive.name)
             except FileNotFoundError:
                 self.logger.warning("Not found: %s", hive_path)
 
-    def dump_hive(self, hive_win_path: PurePath, hive_local_path: Path):
+    def dump_hive(self, hive_win_path: PurePath, hive_local_path: Path, root_hive: PurePath):
         """Dump a Windows registry hive
 
         :param hive_local_path: host path to the download hive file
@@ -149,7 +155,7 @@ class WinRegistryPlugin(AbstractPlugin):
             self.logger.warning("Failed to load hive %s", hive_win_path)
             self.logger.debug(e)
             return
-        root_node = WinRegKeyNode(key=hive.root)
+        root_node = WinRegKeyNode(root_hive, key=hive.root)
         with WinRegMerkleVisitor(thread=True) as visitor:
             visitor.run_visit(root_node)
             last_node = None
