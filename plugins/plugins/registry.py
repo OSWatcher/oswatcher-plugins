@@ -117,6 +117,12 @@ class WinRegMerkleVisitor(MerkleVisitor):
 @define(auto_attribs=True)
 class WinRegistryPlugin(AbstractPlugin):
 
+    def constraints_data(self) -> List[UniqueConstraint]:
+        return [
+            UniqueConstraint(label="WinRegKey", property_list=["hash"]),
+            UniqueConstraint(label="WinRegValue", property_list=["hash"]),
+        ]
+
     def run(self, commit: Commit):
         fs: Tree = commit.filesystem.single()
         for hive_path, root_hive in HIVE_MAPPING.items():
