@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path, PurePath
-from typing import Dict, Iterator
+from typing import Dict, Iterator, List
 
 from attrs import define, field
 from neogit.core.merkle import MerkleVisitor
@@ -12,7 +12,7 @@ from neogit.model.merkle import Blob
 from neogit.model.neo import Commit, Tree
 from regipy import RegistryHive, Subkey, Value
 
-from plugins.types import AbstractPlugin
+from plugins.types import AbstractPlugin, UniqueConstraint
 
 """Directory path to system-wide hives files"""
 S32_CONFIG = PurePath("/Windows/System32/config")
@@ -171,7 +171,7 @@ class WinRegistryPlugin(AbstractPlugin):
         WITH p
         UNWIND $unwind_param as x
         MERGE (n:WinRegValue {hash: x.hash, value: x.value, type: x.type})
-        MERGE (p)-[:HAS_WINREG_VALUE {name: x.name}]->(n)
+        MERGE (p)-[:HAS_CHILD {name: x.name}]->(n)
         """
         # note: Neo4j can store integer as signed 64 bits number
         # however the Windows registry can contain REG_QWORD values up to 2^64 - 1
@@ -195,7 +195,7 @@ class WinRegistryPlugin(AbstractPlugin):
         WITH p
         UNWIND $unwind_param as x
         MERGE (n:WinRegKey {hash: x.hash})
-        MERGE (p)-[:HAS_WINREG_VALUE {name: x.name}]->(n)
+        MERGE (p)-[:HAS_CHILD {name: x.name}]->(n)
         """
         unwind_param = [
             {
@@ -213,6 +213,6 @@ class WinRegistryPlugin(AbstractPlugin):
         WITH b
         MATCH (k:WinRegKey {hash: $root_hash})
         WITH b, k
-        MERGE (b)-[:HAS_WINREG_KEY {name: $name}]->(k)
+        MERGE (b)-[:HAS_WINREG {name: $name}]->(k)
         """
         self.neogit.db.cypher_query(query, {"blob_hash": blob.hash, "root_hash": root_node.hash, "name": root_name})
