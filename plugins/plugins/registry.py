@@ -93,12 +93,12 @@ class WinRegKeyMerkleNode(MerkleNode):
 class WinRegMerkleVisitor(MerkleVisitor):
 
     def visit_WinRegValueNode(self, node: WinRegValueNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
-        self.logger.debug("Visiting %s", node.fullpath)
         hash_obj.update(f"{node.value.name}{node.value.value}{node.value.value_type}".encode())
         merkle_node = WinRegValueMerkleNode(hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, value=node.value)
         return VisitedNode(node, merkle_node)
 
     def visit_WinRegKeyNode(self, node: WinRegKeyNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
+        self.logger.debug("Visiting Key %s", node.fullpath)
         merkle_children = {}
         # sort by 2 criterias
         # - keys first
@@ -111,7 +111,8 @@ class WinRegMerkleVisitor(MerkleVisitor):
             hash_obj.update(data)
             # clear out the current merkle node children Dict
             # so we don't end up with a giant tree in memory
-            merkle_node.children.clear()
+            # TODO: this breaks the plugin: when the node is about to be inserted, he apparently has no children anymore
+            # merkle_node.children.clear()
             merkle_children[child_node.name] = merkle_node
         # compute final hash
         merkle_node = WinRegKeyMerkleNode(
@@ -163,6 +164,8 @@ class WinRegistryPlugin(AbstractPlugin):
                 if isinstance(node.return_value, WinRegKeyMerkleNode):
                     self.insert_from_visited_node_cypher(node.return_value)
                     last_node = node
+                    # clear children to save RAM
+                    node.return_value.children.clear()
             return last_node
 
     def insert_from_visited_node_cypher(self, node: WinRegKeyMerkleNode):
