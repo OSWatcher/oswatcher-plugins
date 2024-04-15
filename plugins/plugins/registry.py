@@ -168,29 +168,23 @@ class WinRegistryPlugin(AbstractPlugin):
             return last_node
 
     def insert_from_visited_node_cypher(self, node: WinRegKeyMerkleNode):
-        self.create_parent(node)
-        self.insert_child_values(node)
-        self.insert_child_keys(node)
-
-    def create_parent(self, node: WinRegKeyMerkleNode):
         query = """
-        MERGE (n:WinRegKey {hash: $hash})
-        """
-        self.neogit.db.cypher_query(query, {"hash": node.hash})
-
-    def insert_child_values(self, node: WinRegKeyMerkleNode):
-        """Create child Values"""
-        query = """
-        MATCH (p:WinRegKey {hash: $parent_hash})
+        MERGE (p:WinRegKey {hash: $parent_hash})
         WITH p
-        UNWIND $unwind_param as x
-        MERGE (n:WinRegValue {hash: x.hash, value: x.value, type: x.type})
-        MERGE (p)-[:HAS_CHILD {name: x.name}]->(n)
+        FOREACH (cv IN $child_values |
+            MERGE (v:WinRegValue {hash: cv.hash, value: cv.value, type: cv.type})
+            MERGE (p)-[:HAS_CHILD {name: cv.name}]->(v)
+        )
+        WITH p
+        FOREACH (ck IN $child_keys |
+            MERGE (k:WinRegKey {hash: ck.hash})
+            MERGE (p)-[:HAS_CHILD {name: ck.name}]->(k)
+        )
         """
         # note: Neo4j can store integer as signed 64 bits number
         # however the Windows registry can contain REG_QWORD values up to 2^64 - 1
         # so we need to ensure the value is casted as a string here
-        unwind_param = [
+        child_values = [
             {
                 "name": child_name,
                 "hash": child_node.hash,
@@ -200,18 +194,7 @@ class WinRegistryPlugin(AbstractPlugin):
             for child_name, child_node in node.children.items()
             if child_node.label == MerkleLabel.Blob
         ]
-        self.neogit.db.cypher_query(query, {"parent_hash": node.hash, "unwind_param": unwind_param})
-
-    def insert_child_keys(self, node: WinRegKeyMerkleNode):
-        """Create child Keys"""
-        query = """
-        MATCH (p:WinRegKey {hash: $parent_hash})
-        WITH p
-        UNWIND $unwind_param as x
-        MERGE (n:WinRegKey {hash: x.hash})
-        MERGE (p)-[:HAS_CHILD {name: x.name}]->(n)
-        """
-        unwind_param = [
+        child_keys = [
             {
                 "name": child_name,
                 "hash": child_node.hash,
@@ -219,7 +202,14 @@ class WinRegistryPlugin(AbstractPlugin):
             for child_name, child_node in node.children.items()
             if child_node.label == MerkleLabel.Tree
         ]
-        self.neogit.db.cypher_query(query, {"parent_hash": node.hash, "unwind_param": unwind_param})
+        self.neogit.db.cypher_query(
+            query,
+            {
+                "parent_hash": node.hash,
+                "child_values": child_values,
+                "child_keys": child_keys,
+            },
+        )
 
     def attach_root_key_to_blob(self, blob: Blob, root_node: WinRegKeyMerkleNode, root_name: str):
         query = """
