@@ -74,10 +74,9 @@ class WinRegKeyNode(CommonWinRegNode):
 
     def iter_child_nodes(self) -> Iterator[Node]:
         for sub_key in self.key.iter_subkeys():
-            subkey_node = WinRegKeyNode(self.fullpath, sub_key)
-            yield subkey_node
-            for value in sub_key.iter_values():
-                yield WinRegValueNode(subkey_node.fullpath, value)
+            yield WinRegKeyNode(self.fullpath, sub_key)
+        for value in self.key.iter_values():
+            yield WinRegValueNode(self.fullpath, value)
 
 
 @define(auto_attribs=True)
