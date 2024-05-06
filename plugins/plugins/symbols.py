@@ -461,15 +461,53 @@ class SymbolsPlugin(AbstractPlugin):
 
     def insert_windatatype_cypher(self, node: WinDataTypeMerkleNode):
         query = """
-        MERGE (d:WinDataType {hash: $hash, type: $type})
+        MERGE (d:WinDataType {hash: $hash})  // Ensure 'hash' uniquely identifies 'WinDataType'
+        ON CREATE SET
+            d.type = CASE WHEN $type IS NOT NULL THEN $type END,
+            d.name = CASE WHEN $name IS NOT NULL THEN $name END,
+            d.array_counter = CASE WHEN $array_counter IS NOT NULL THEN $array_counter END,
+            d.bit_position = CASE WHEN $bit_position IS NOT NULL THEN $bit_position END,
+            d.bit_length = CASE WHEN $bit_length IS NOT NULL THEN $bit_length END
+        ON MATCH SET
+            d.type = CASE WHEN $type IS NOT NULL THEN $type END,
+            d.name = CASE WHEN $name IS NOT NULL THEN $name END,
+            d.array_counter = CASE WHEN $array_counter IS NOT NULL THEN $array_counter END,
+            d.bit_position = CASE WHEN $bit_position IS NOT NULL THEN $bit_position END,
+            d.bit_length = CASE WHEN $bit_length IS NOT NULL THEN $bit_length END
         WITH d
-        FOREACH (x IN $children|
-            MERGE (c:WinDataType {hash: x.hash, type: x.type})
-            MERGE (d)-[:HAS_DATA_TYPE]->(c)
-        )
+        UNWIND $children AS child
+        MERGE (c:WinDataType {hash: child.hash})  // Assuming 'hash' is unique for child nodes too
+        ON CREATE SET
+            c.type = CASE WHEN child.type IS NOT NULL THEN child.type END,
+            c.name = CASE WHEN child.name IS NOT NULL THEN child.name END,
+            c.array_counter = CASE WHEN child.array_counter IS NOT NULL THEN child.array_counter END,
+            c.bit_position = CASE WHEN child.bit_position IS NOT NULL THEN child.bit_position END,
+            c.bit_length = CASE WHEN child.bit_length IS NOT NULL THEN child.bit_length END
+        MERGE (d)-[:HAS_DATA_TYPE]->(c)
         """
-        children = [{"hash": x.hash, "type": x.kind.name} for hash, x in node.children.items()]
-        self.neogit.db.cypher_query(query, {"hash": node.hash, "type": node.kind.name, "children": children})
+        children = [
+            {
+                "hash": x.hash,
+                "type": x.kind.name,
+                "name": x.name,
+                "array_counter": x.array_counter,
+                "bit_position": x.bit_position,
+                "bit_length": x.bit_length,
+            }
+            for hash, x in node.children.items()
+        ]
+        self.neogit.db.cypher_query(
+            query,
+            {
+                "hash": node.hash,
+                "type": node.kind.name,
+                "name": node.name,
+                "array_counter": node.array_counter,
+                "bit_position": node.bit_position,
+                "bit_length": node.bit_length,
+                "children": children,
+            },
+        )
 
     def insert_struct_cypher(self, blob_hash: str, node: WinStructMerkleNode):
         query = """
