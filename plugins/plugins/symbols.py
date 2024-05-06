@@ -94,25 +94,36 @@ class FieldKindType(Enum):
 class UserTypeKindType(Enum):
     Struct = auto()
     Union = auto()
+    Enum = auto()
 
 
 @define(auto_attribs=True)
 class WinStructNode(Node):
     name: str
     struct_data: Dict
-    # either struct or union
+    # either struct, union or enum
     kind: UserTypeKindType = field(init=False)
     size: int = field(init=False)
 
     def __attrs_post_init__(self):
         self.size = self.struct_data["size"]
-        self.kind = UserTypeKindType[self.struct_data["kind"].capitalize()]
+        if "constants" in self.struct_data:
+            # enum
+            self.kind = UserTypeKindType.Enum
+        else:
+            self.kind = UserTypeKindType[self.struct_data["kind"].capitalize()]
 
     def iter_child_nodes(self) -> Generator[Node, None, None]:
-        # iterate on every field
-        for field_name, field_data in self.struct_data["fields"].items():
-            field_node = WinStructFieldNode(name=field_name, field_data=field_data)
-            yield field_node
+        if self.kind == UserTypeKindType.Enum:
+            for name, value in self.struct_data["constants"].items():
+                field_node = WinStructFieldNode(
+                    name=name, field_data={"offset": 0, "type": {"kind": FieldKindType.Base, "name": "int"}}
+                )
+        else:
+            # iterate on every field
+            for field_name, field_data in self.struct_data["fields"].items():
+                field_node = WinStructFieldNode(name=field_name, field_data=field_data)
+                yield field_node
 
 
 @define(auto_attribs=True)
@@ -371,11 +382,11 @@ class SymbolsPlugin(AbstractPlugin):
         with SymbolsMerkleVisitor() as visitor:
             for enum_name, enum_data in sorted(j_pdb.items()):
                 self.logger.debug("Enum: %s", enum_name)
-                enum_node = EnumNode(enum_name=enum_name, enum_data=enum_data)
+                enum_node = WinStructNode(name=enum_name, struct_data=enum_data)
                 visited_node = visitor.visit(enum_node)
                 merkle_node = visited_node.return_value
-                assert isinstance(merkle_node, EnumMerkleNode)
-                self.insert_enum_cypher(blob_hash, merkle_node)
+                assert isinstance(merkle_node, WinStructMerkleNode)
+                self.insert_struct_cypher(blob_hash, merkle_node)
         return len(j_pdb.items())
 
     def parse_users_types(self, blob_hash: str, j_pdb: Dict) -> int:
@@ -442,14 +453,16 @@ class SymbolsPlugin(AbstractPlugin):
         for sym, value in sorted(symbols.items()):
             if sym.startswith("?") or sym.startswith("$"):
                 continue
-            address = value["address"]
+            # store addresses as string to avoid the integer being broken into high and low
+            # by Neo4j javascript driver, resulting into GraphQL issues
+            address = str(value["address"])
             param_list.append(
                 {
                     "sym_name": sym,
                     "address": address,
                 }
             )
-            self.logger.debug("Symbol %s (%s)", sym, hex(address))
+            self.logger.debug("Symbol %s (%s)", sym, address)
         query = """
         MATCH (b:Blob {hash: $blob_hash})
         WITH b
