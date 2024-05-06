@@ -118,8 +118,9 @@ class WinStructNode(Node):
         if self.kind == UserTypeKindType.Enum:
             for name, value in self.struct_data["constants"].items():
                 field_node = WinStructFieldNode(
-                    name=name, field_data={"offset": 0, "type": {"kind": FieldKindType.Base, "name": "int"}}
+                    name=name, field_data={"offset": 0, "type": {"kind": FieldKindType.Base.name, "name": "int"}}
                 )
+                yield field_node
         else:
             # iterate on every field
             for field_name, field_data in self.struct_data["fields"].items():
@@ -188,6 +189,7 @@ class WinDataTypeNode(Node):
 
 @define(auto_attribs=True)
 class WinDataTypeMerkleNode(MerkleNode):
+    kind: FieldKindType = field(kw_only=True)
     name: Optional[str] = field(default=None, kw_only=True)
     array_counter: Optional[int] = field(default=None, kw_only=True)
     bit_length: Optional[int] = field(default=None, kw_only=True)
@@ -244,7 +246,9 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 | FieldKindType.Function
             ):
                 hash_obj.update(f"{node.name}".encode())
-                merkle_node = WinDataTypeMerkleNode(hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, name=node.name)
+                merkle_node = WinDataTypeMerkleNode(
+                    hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, kind=node.kind, name=node.name
+                )
                 return VisitedNode(node, merkle_node)
             case FieldKindType.Array:
                 subtype = next(node.iter_child_nodes())
@@ -255,6 +259,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 merkle_node = WinDataTypeMerkleNode(
                     hash=hash_obj.hexdigest(),
                     label=MerkleLabel.Blob,
+                    kind=node.kind,
                     array_counter=node.array_counter,
                     children={merkle_node.name: merkle_node},
                 )
@@ -268,6 +273,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 merkle_node = WinDataTypeMerkleNode(
                     hash=hash_obj.hexdigest(),
                     label=MerkleLabel.Blob,
+                    kind=node.kind,
                     bit_length=node.bit_length,
                     bit_position=node.bit_position,
                     children={merkle_node.name: merkle_node},
@@ -280,7 +286,10 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 data = f"{merkle_node.hash}\n".encode()
                 hash_obj.update(data)
                 merkle_node = WinDataTypeMerkleNode(
-                    hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, children={merkle_node.name: merkle_node}
+                    hash=hash_obj.hexdigest(),
+                    label=MerkleLabel.Blob,
+                    kind=node.kind,
+                    children={merkle_node.name: merkle_node},
                 )
                 return VisitedNode(node, merkle_node)
 
@@ -375,7 +384,7 @@ class SymbolsPlugin(AbstractPlugin):
             UniqueConstraint(label="Symbol", property_list=["name"]),
             UniqueConstraint(label="WinStruct", property_list=["hash"]),
             UniqueConstraint(label="WinStructField", property_list=["hash"]),
-            UniqueConstraint(label="WinStructDataType", property_list=["hash"]),
+            UniqueConstraint(label="WinDataType", property_list=["hash"]),
         ]
 
     def run(self, commit: Commit):
@@ -428,69 +437,60 @@ class SymbolsPlugin(AbstractPlugin):
             return blob_hash, pdb_name, Path(tmp_file.name)
 
     def parse_pdb_json(self, blob_hash: str, pdb_name: str, j_pdb: Dict):
-        count_enum = self.parse_enums(blob_hash, j_pdb["enums"])
+        count_enum = self.parse_users_types(blob_hash, j_pdb["enums"])
         count_syms = self.insert_symbols(blob_hash, j_pdb["symbols"])
         count_types = self.parse_users_types(blob_hash, j_pdb["user_types"])
         self.logger.info(
             "PDB: %s - Inserted %d enums, %d symbols, %d user types", pdb_name, count_enum, count_syms, count_types
         )
 
-    def parse_enums(self, blob_hash: str, j_pdb: Dict) -> int:
-        with SymbolsMerkleVisitor() as visitor:
-            for enum_name, enum_data in sorted(j_pdb.items()):
-                self.logger.debug("Enum: %s", enum_name)
-                enum_node = WinStructNode(name=enum_name, struct_data=enum_data)
-                visited_node = visitor.visit(enum_node)
-                merkle_node = visited_node.return_value
-                assert isinstance(merkle_node, WinStructMerkleNode)
-                self.insert_struct_cypher(blob_hash, merkle_node)
-        return len(j_pdb.items())
-
     def parse_users_types(self, blob_hash: str, j_pdb: Dict) -> int:
-        with SymbolsMerkleVisitor() as visitor:
+        with SymbolsMerkleVisitor(thread=True) as visitor:
             for struct_name, struct_data in sorted(j_pdb.items()):
                 self.logger.debug("Struct: %s", struct_name)
                 struct_node = WinStructNode(name=struct_name, struct_data=struct_data)
-                visited_node = visitor.visit(struct_node)
-                merkle_node = visited_node.return_value
-                assert isinstance(visited_node.return_value, WinStructMerkleNode)
-                self.insert_struct_cypher(blob_hash, merkle_node)
+                visitor.run_visit(struct_node)
+                for node in visitor.as_gen():
+                    merkle_node = node.return_value
+                    if isinstance(merkle_node, WinDataTypeMerkleNode):
+                        self.insert_windatatype_cypher(merkle_node)
+                    if isinstance(merkle_node, WinStructMerkleNode):
+                        self.insert_struct_cypher(blob_hash, merkle_node)
+
         return len(j_pdb.items())
 
-    def insert_enum_cypher(self, blob_hash: str, node: EnumMerkleNode):
+    def insert_windatatype_cypher(self, node: WinDataTypeMerkleNode):
         query = """
-        MERGE (e:Enum {hash: $hash, name: $name})
-        WITH e
-        UNWIND $unwind_param as x
-        MERGE (k:EnumMember {hash: x.hash, name: x.name, value: x.value})
-        MERGE (e)-[:HAS_ENUM_MEMBER]->(k)
-        WITH e
-        MATCH (b:Blob {hash: $blob_hash})
-        WITH b, e
-        MERGE (b)-[:HAS_ENUM]->(e)
-        """
-        unwind_param = [
-            {"hash": child_node.hash, "name": child_name, "value": child_node.value}
-            for child_name, child_node in node.children.items()
-        ]
-        self.neogit.db.cypher_query(
-            query, {"hash": node.hash, "name": node.name, "unwind_param": unwind_param, "blob_hash": blob_hash}
+        MERGE (d:WinDataType {hash: $hash, type: $type})
+        WITH d
+        FOREACH (x IN $children|
+            MERGE (c:WinDataType {hash: x.hash, type: x.type})
+            MERGE (d)-[:HAS_DATA_TYPE]->(c)
         )
+        """
+        children = [{"hash": x.hash, "type": x.kind.name} for hash, x in node.children.items()]
+        self.neogit.db.cypher_query(query, {"hash": node.hash, "type": node.kind.name, "children": children})
 
     def insert_struct_cypher(self, blob_hash: str, node: WinStructMerkleNode):
         query = """
         MERGE (s:WinStruct {hash: $hash, name: $name, size: $size, kind: $kind})
         WITH s
         UNWIND $unwind_param as x
+        MATCH (d:WinDataType {hash: x.data_hash})
         MERGE (f:WinStructField {hash: x.hash, name: x.name, offset: x.offset})
-        MERGE (s)-[:HAS_FIELD]->(f)
+        MERGE (s)-[:HAS_FIELD]->(f)-[:HAS_DATA_TYPE]->(d)
         WITH s
         MATCH (b:Blob {hash: $blob_hash})
         WITH b, s
         MERGE (b)-[:HAS_STRUCT]->(s)
         """
         unwind_param = [
-            {"hash": child_node.hash, "name": child_name, "offset": child_node.offset}
+            {
+                "hash": child_node.hash,
+                "name": child_name,
+                "offset": child_node.offset,
+                "data_hash": next(iter(child_node.children.values())).hash,
+            }
             for child_name, child_node in node.children.items()
         ]
         self.neogit.db.cypher_query(
