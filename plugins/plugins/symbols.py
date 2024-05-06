@@ -84,6 +84,7 @@ class EnumMerkleNode(MerkleNode):
 class FieldKindType(Enum):
     Base = auto()
     Pointer = auto()
+    Function = auto()
     Enum = auto()
     Array = auto()
     Struct = auto()
@@ -131,36 +132,13 @@ class WinStructFieldNode(Node):
     name: str = field()
     field_data: Dict = field()
     offset: int = field(init=False)
-    type: Dict = field(init=False)
-    kind: FieldKindType = field(init=False)
-    # if array
-    array_counter: Optional[int] = field(init=False)
-    # if bitfield
-    bit_length: Optional[int] = field(init=False)
-    bit_position: Optional[int] = field(init=False)
-    # if pointer or bitfield or array
-    subtype: Optional[Dict] = field(init=False)
 
     def __attrs_post_init__(self):
         self.offset = self.field_data["offset"]
-        self.type = self.field_data["type"]
-        self.kind = self.field_data["type"]["kind"]
-        match self.kind:
-            case FieldKindType.Base | FieldKindType.Enum | FieldKindType.Struct | FieldKindType.Union:
-                self.subtype = self.field_data["type"]
-            case FieldKindType.Array:
-                self.array_counter = self.field_data["type"]["count"]
-                self.subtype = self.field_data["type"]["subtype"]
-            case FieldKindType.Bitfield:
-                self.bit_length = self.field_data["type"]["bit_length"]
-                self.bit_position = self.field_data["type"]["bit_position"]
-                self.subtype = self.field_data["type"]["type"]
-            case FieldKindType.Pointer:
-                self.subtype = self.field_data["type"]["subtype"]
 
     def iter_child_nodes(self) -> Generator[Node, None, None]:
         # construct the subtype node
-        yield WinDataTypeNode(self.kind, self.subtype)
+        yield WinDataTypeNode(data_type=self.field_data["type"])
 
 
 @define(auto_attribs=True)
@@ -173,20 +151,53 @@ class WinDataTypeNode(Node):
     - name: void
     """
 
-    kind: FieldKindType = field()
-    subtype: Dict = field()
+    data_type: Dict = field()
+    kind: FieldKindType = field(init=False)
+    # if base, enum, struct, union
+    name: Optional[str] = field(init=False)
+    # if array
+    array_counter: Optional[int] = field(init=False)
+    # if bitfield
+    bit_length: Optional[int] = field(init=False)
+    bit_position: Optional[int] = field(init=False)
+    # if pointer or bitfield or array
+    subtype: Optional[Dict] = field(init=False)
+
+    def __attrs_post_init__(self):
+        self.kind = FieldKindType[self.data_type["kind"].capitalize()]
+        match self.kind:
+            case FieldKindType.Base | FieldKindType.Enum | FieldKindType.Struct | FieldKindType.Union:
+                self.name = self.data_type["name"]
+            case FieldKindType.Array:
+                self.array_counter = self.data_type["count"]
+                self.subtype = self.data_type["subtype"]
+            case FieldKindType.Bitfield:
+                self.bit_length = self.data_type["bit_length"]
+                self.bit_position = self.data_type["bit_position"]
+                self.subtype = self.data_type["type"]
+            case FieldKindType.Pointer:
+                self.subtype = self.data_type["subtype"]
+            case FieldKindType.Function:
+                self.name = "function"
+
+    def iter_child_nodes(self) -> Generator[Node, None, None]:
+        match self.kind:
+            case FieldKindType.Array | FieldKindType.Bitfield | FieldKindType.Pointer:
+                yield WinDataTypeNode(data_type=self.subtype)
 
 
 @define(auto_attribs=True)
 class WinDataTypeMerkleNode(MerkleNode):
-    name: str = field(kw_only=True)
+    name: Optional[str] = field(default=None, kw_only=True)
+    array_counter: Optional[int] = field(default=None, kw_only=True)
+    bit_length: Optional[int] = field(default=None, kw_only=True)
+    bit_position: Optional[int] = field(default=None, kw_only=True)
 
 
 @define(auto_attribs=True)
 class WinStructFieldMerkleNode(MerkleNode):
     name: str = field(kw_only=True)
     offset: int = field(kw_only=True)
-    type: str = field(kw_only=True)
 
 
 @define(auto_attribs=True)
@@ -224,27 +235,72 @@ class SymbolsMerkleVisitor(MerkleVisitor):
         return VisitedNode(node, merkle_node)
 
     def visit_WinDataTypeNode(self, node: WinDataTypeNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
-        # TODO
-        # match node.kind:
-        #     case FieldKindType.Base | FieldKindType.Enum | FieldKindType.Struct | FieldKindType.Union:
-        #         data = f"{node.kind.name}{node.subtype['name']}".encode()
-        #     case FieldKindType.Pointer:
-        #         data = f"{node.subtype['kind']}{node.subtype['name']}"
-        pass
+        match node.kind:
+            case (
+                FieldKindType.Base
+                | FieldKindType.Enum
+                | FieldKindType.Struct
+                | FieldKindType.Union
+                | FieldKindType.Function
+            ):
+                hash_obj.update(f"{node.name}".encode())
+                merkle_node = WinDataTypeMerkleNode(hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, name=node.name)
+                return VisitedNode(node, merkle_node)
+            case FieldKindType.Array:
+                subtype = next(node.iter_child_nodes())
+                visited_node = self.visit(subtype)
+                merkle_node = visited_node.return_value
+                data = f"{merkle_node.hash}-{node.array_counter}\n".encode()
+                hash_obj.update(data)
+                merkle_node = WinDataTypeMerkleNode(
+                    hash=hash_obj.hexdigest(),
+                    label=MerkleLabel.Blob,
+                    array_counter=node.array_counter,
+                    children={merkle_node.name: merkle_node},
+                )
+                return VisitedNode(node, merkle_node)
+            case FieldKindType.Bitfield:
+                subtype = next(node.iter_child_nodes())
+                visited_node = self.visit(subtype)
+                merkle_node = visited_node.return_value
+                data = f"{merkle_node.hash}-{node.bit_length}-{node.bit_position}\n".encode()
+                hash_obj.update(data)
+                merkle_node = WinDataTypeMerkleNode(
+                    hash=hash_obj.hexdigest(),
+                    label=MerkleLabel.Blob,
+                    bit_length=node.bit_length,
+                    bit_position=node.bit_position,
+                    children={merkle_node.name: merkle_node},
+                )
+                return VisitedNode(node, merkle_node)
+            case FieldKindType.Pointer:
+                subtype = next(node.iter_child_nodes())
+                visited_node = self.visit(subtype)
+                merkle_node = visited_node.return_value
+                data = f"{merkle_node.hash}\n".encode()
+                hash_obj.update(data)
+                merkle_node = WinDataTypeMerkleNode(
+                    hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, children={merkle_node.name: merkle_node}
+                )
+                return VisitedNode(node, merkle_node)
 
     def visit_WinStructFieldNode(
         self, node: WinStructFieldNode, hash_obj: hashlib._Hash, *args, **kwargs
     ) -> VisitedNode:
+        children = {}
+        for data_type in node.iter_child_nodes():
+            visited_node = self.visit(data_type)
+            merkle_node = visited_node.return_value
+            data = f"{merkle_node.hash}\n".encode()
+            hash_obj.update(data)
+            children[merkle_node.hash] = merkle_node
         # merklize the data type
-        # convert type to string for hashing
-        # ensure sorted
-        type_str = json.dumps(node.type, sort_keys=True)
         # need separator to distinguish between
         # "Reserved" "10" "xxx"
         # "Reserved1 "0" "xxx"
-        hash_obj.update(f"{node.name}-{node.offset}-{type_str}".encode())
+        hash_obj.update(f"{node.name}-{node.offset}".encode())
         merkle_node = WinStructFieldMerkleNode(
-            hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, name=node.name, offset=node.offset, type=type_str
+            hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, name=node.name, offset=node.offset, children=children
         )
         return VisitedNode(node, merkle_node)
 
@@ -319,6 +375,7 @@ class SymbolsPlugin(AbstractPlugin):
             UniqueConstraint(label="Symbol", property_list=["name"]),
             UniqueConstraint(label="WinStruct", property_list=["hash"]),
             UniqueConstraint(label="WinStructField", property_list=["hash"]),
+            UniqueConstraint(label="WinStructDataType", property_list=["hash"]),
         ]
 
     def run(self, commit: Commit):
@@ -425,7 +482,7 @@ class SymbolsPlugin(AbstractPlugin):
         MERGE (s:WinStruct {hash: $hash, name: $name, size: $size, kind: $kind})
         WITH s
         UNWIND $unwind_param as x
-        MERGE (f:WinStructField {hash: x.hash, name: x.name, offset: x.offset, type: x.type})
+        MERGE (f:WinStructField {hash: x.hash, name: x.name, offset: x.offset})
         MERGE (s)-[:HAS_FIELD]->(f)
         WITH s
         MATCH (b:Blob {hash: $blob_hash})
@@ -433,7 +490,7 @@ class SymbolsPlugin(AbstractPlugin):
         MERGE (b)-[:HAS_STRUCT]->(s)
         """
         unwind_param = [
-            {"hash": child_node.hash, "name": child_name, "offset": child_node.offset, "type": child_node.type}
+            {"hash": child_node.hash, "name": child_name, "offset": child_node.offset}
             for child_name, child_node in node.children.items()
         ]
         self.neogit.db.cypher_query(
