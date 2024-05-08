@@ -48,39 +48,7 @@ def return_exceptions(f):
     return wrapped
 
 
-# enums
-@define(auto_attribs=True)
-class EnumMemberNode(Node):
-    name: str = field()
-    value: int = field()
-
-
-@define(auto_attribs=True)
-class EnumNode(Node):
-    enum_name: str = field()
-    enum_data: Dict = field()
-
-    def iter_child_nodes(self) -> Generator[Node, None, None]:
-        for name, value in self.enum_data["constants"].items():
-            yield EnumMemberNode(name=name, value=value)
-
-
-@define(auto_attribs=True)
-class EnumMemberMerkleNode(MerkleNode):
-    """represents an enum member in the graph"""
-
-    name: str = field(kw_only=True)
-    value: int = field(kw_only=True)
-
-
-@define(auto_attribs=True)
-class EnumMerkleNode(MerkleNode):
-    name: str = field(kw_only=True)
-
-
 # User Types (structs)
-
-
 class FieldKindType(Enum):
     Base = auto()
     Pointer = auto()
@@ -118,7 +86,7 @@ class WinStructNode(Node):
         if self.kind == UserTypeKindType.Enum:
             for name, value in self.struct_data["constants"].items():
                 field_node = WinStructFieldNode(
-                    name=name, field_data={"offset": 0, "type": {"kind": FieldKindType.Base.name, "name": "int"}}
+                    name=name, field_data={"offset": value, "type": {"kind": FieldKindType.Base.name, "name": "int"}}
                 )
                 yield field_node
         else:
@@ -211,30 +179,6 @@ class WinStructMerkleNode(MerkleNode):
 
 # define the visitor
 class SymbolsMerkleVisitor(MerkleVisitor):
-
-    def visit_EnumMemberNode(self, node: EnumMemberNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
-        hash_obj.update(f"{node.name}-{node.value}".encode())
-        merkle_node = EnumMemberMerkleNode(
-            hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, name=node.name, value=node.value
-        )
-        return VisitedNode(node, merkle_node)
-
-    def visit_EnumNode(self, node: EnumNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
-        children = {}
-        # ensure sorted by name
-        for child in sorted(node.iter_child_nodes(), key=lambda e: e.name):
-            # yield children
-            visited_node = self.visit(child)
-            merkle_node = visited_node.return_value
-            data = f"{merkle_node.hash}\n".encode()
-            hash_obj.update(data)
-            children[child.name] = merkle_node
-        hash_obj.update(f"{node.enum_name}".encode())
-        # compute final hash
-        merkle_node = EnumMerkleNode(
-            hash=hash_obj.hexdigest(), children=children, label=MerkleLabel.Tree, name=node.enum_name
-        )
-        return VisitedNode(node, merkle_node)
 
     def visit_WinDataTypeNode(self, node: WinDataTypeNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
         match node.kind:
