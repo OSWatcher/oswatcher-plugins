@@ -323,8 +323,6 @@ class SymbolsPlugin(AbstractPlugin):
 
     def constraints_data(self) -> lief.List[UniqueConstraint]:
         return [
-            UniqueConstraint(label="Enum", property_list=["hash"]),
-            UniqueConstraint(label="EnumMember", property_list=["hash"]),
             UniqueConstraint(label="Symbol", property_list=["name"]),
             UniqueConstraint(label="WinStruct", property_list=["hash"]),
             UniqueConstraint(label="WinStructField", property_list=["hash"]),
