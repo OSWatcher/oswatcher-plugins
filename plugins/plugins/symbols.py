@@ -9,7 +9,7 @@ import tempfile
 from binascii import hexlify
 from contextlib import contextmanager
 from enum import Enum, auto
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Dict, Generator, Optional, Tuple
 from urllib import parse as urllib_parse
 from urllib import request as urllib_request
@@ -320,6 +320,8 @@ class SymbolsPlugin(AbstractPlugin):
     max_workers: int = field(init=False, default=os.cpu_count())
 
     PE_MIME_TYPE = "application/vnd.microsoft.portable-executable"
+    # only process these filenames for now
+    FILTER_FILENAME = ['ntoskrnl.exe', 'ntdll.dll', 'kernel32.dll']
 
     def constraints_data(self) -> lief.List[UniqueConstraint]:
         return [
@@ -333,13 +335,16 @@ class SymbolsPlugin(AbstractPlugin):
         # identify every PE file Blob
         fs = commit.filesystem.single()
         query = """
-        MATCH (r:Tree)-[:HAS_CHILD_TREE|HAS_CHILD_BLOB*]->(b:Blob)-[:HAS_MIME_TYPE]->(m:MimeType)
-        WHERE m.mime = $mime_type AND r.hash = $root_hash
-        RETURN b.hash
+        MATCH path = (r:Tree {hash: $root_hash})-[:HAS_CHILD_TREE|HAS_CHILD_BLOB*]->(b:Blob)
+        WHERE EXISTS {
+                MATCH (b)-[:HAS_MIME_TYPE]->(m:MimeType)
+                WHERE m.mime = $mime_type
+            }
+        RETURN [rel IN relationships(path) | rel.name] AS parts, b.hash
         """
         rows, _ = self.neogit.db.cypher_query(query, {"mime_type": self.__class__.PE_MIME_TYPE, "root_hash": fs.hash})
-        blob_hashes = (row[0] for row in rows)
-        stage = pl.process.map(self.stage_parse_code_view, blob_hashes, workers=4)
+        blob_results = ((PurePath(*row[0]), row[1]) for row in rows if PurePath(*row[0]).name in self.FILTER_FILENAME)
+        stage = pl.process.map(self.stage_parse_code_view, blob_results, workers=4)
         stage = pl.process.map(self.stage_process_pdb, stage, workers=self.max_workers, maxsize=self.max_workers)
         for ret in stage:
             if isinstance(ret, BaseException):
@@ -352,7 +357,9 @@ class SymbolsPlugin(AbstractPlugin):
             self.parse_pdb_json(blob_hash, pdb_name, j_data)
 
     @return_exceptions
-    def stage_parse_code_view(self, blob_hash: str) -> Optional[Tuple[str, int, str]]:
+    def stage_parse_code_view(self, blob_result: Tuple[PurePath, str]) -> Optional[Tuple[str, int, str]]:
+        self.logger.debug("Processing PE file: %s", blob_result[0])
+        blob_hash = blob_result[1]
         with self.downloaded_file(blob_hash) as local_file:
             ret = parse_code_view(local_file)
             if not ret:
@@ -376,9 +383,11 @@ class SymbolsPlugin(AbstractPlugin):
             raise ValueError("Failed to parse PDB %s on %s", pdb_name, blob_hash) from e
         with tempfile.NamedTemporaryFile(delete=False, mode="w+") as tmp_file:
             json.dump(j_data, tmp_file)
+            self.logger.debug("PDB: %s - JSON file: %s", pdb_name, tmp_file.name)
             return blob_hash, pdb_name, Path(tmp_file.name)
 
     def parse_pdb_json(self, blob_hash: str, pdb_name: str, j_pdb: Dict):
+        self.logger.debug("PDB: %s - Parsing JSON", pdb_name)
         count_enum = self.parse_users_types(blob_hash, j_pdb["enums"])
         count_syms = self.insert_symbols(blob_hash, j_pdb["symbols"])
         count_types = self.parse_users_types(blob_hash, j_pdb["user_types"])

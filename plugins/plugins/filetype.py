@@ -20,7 +20,8 @@ class FileTypePlugin(AbstractPlugin):
     def run(self, commit: Commit):
         fs = commit.filesystem.single()
         self.logger.info("root: %s", fs)
-        for index, blob in enumerate(fs.all_blobs()):
+        for index, (path, blob) in enumerate(fs.all_blobs()):
+            self.logger.debug("[%s] path: %s, blob: %s", index, path, blob.hash)
             # download blob
             bio = BytesIO()
             total_size = 0
