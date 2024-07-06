@@ -30,6 +30,7 @@ pypeln = "^0.4.9"
 
 
 [tool.poetry.group.dev.dependencies]
+poethepoet = "^0.26.1"
 black = "24.3.0"
 flake8 = "6.0.0"
 isort = "5.11.4"
