@@ -20,6 +20,7 @@ def post_mortem(f):
 
             _, _, tb = sys.exc_info()
             ipdb.post_mortem(tb)
+            sys.exit(1)
 
     return wrapper
 
