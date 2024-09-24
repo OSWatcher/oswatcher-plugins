@@ -5,6 +5,7 @@ from typing import List
 import magic
 from attrs import define
 from neogit.model.neo import Commit
+from neogit.service.neogit import cypher_query_with_backoff
 
 from plugins.types import AbstractPlugin, UniqueConstraint
 
@@ -54,4 +55,4 @@ class FileTypePlugin(AbstractPlugin):
             MATCH (b:Blob {hash: $blob_hash})
             MERGE (b)-[:HAS_MIME_TYPE]->(m)
             """
-            self.neogit.db.cypher_query(query, {"blob_hash": blob.hash, "mime_type": file_type})
+            cypher_query_with_backoff(query, {"blob_hash": blob.hash, "mime_type": file_type})

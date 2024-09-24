@@ -808,7 +808,7 @@ types-PyYAML = "^6.0.0"
 type = "git"
 url = "https://github.com/OSWatcher/neogit.git"
 reference = "HEAD"
-resolved_reference = "baf9236823c7f5b2dbfd9798e3c71411ebad8d51"
+resolved_reference = "9d1bfaf5026fc3dd9a3d0c8a5122a62cc4ff573c"
 
 [[package]]
 name = "neomodel"
