@@ -321,7 +321,7 @@ class SymbolsPlugin(AbstractPlugin):
 
     PE_MIME_TYPE = "application/vnd.microsoft.portable-executable"
     # only process these filenames for now
-    FILTER_FILENAME = ['ntoskrnl.exe', 'ntdll.dll', 'kernel32.dll']
+    FILTER_FILENAME = ["ntoskrnl.exe", "ntdll.dll", "kernel32.dll"]
 
     def constraints_data(self) -> lief.List[UniqueConstraint]:
         return [
