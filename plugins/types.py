@@ -34,8 +34,9 @@ class AbstractPlugin(BetterContextManager):
         # can't mix schema modification and write query in the same transaction
         with self.neogit.db.transaction:
             self.ensure_constraints()
-        with self.neogit.db.transaction:
-            self.run(commit)
+        # TODO: fix transaction
+        # with self.neogit.db.transaction:
+        self.run(commit)
 
     def ensure_constraints(self):
         """Ensure the constraints are in the database"""
