@@ -21,12 +21,3 @@ MAP_PLUGIN: Dict[PluginType, Type[AbstractPlugin]] = {
 }
 
 __all__ = ["MAP_PLUGIN", "PluginType", "SymbolsPlugin", "WinRegistryPlugin"]
-
-
-MAP_PLUGIN = {
-    PluginType.FILETYPE: FileTypePlugin,
-    PluginType.SYMBOLS: SymbolsPlugin,
-    PluginType.WINREG: WinRegistryPlugin,
-}
-
-__all__ = ["MAP_PLUGIN", "PluginType", "SymbolsPlugin", "WinRegistryPlugin"]
