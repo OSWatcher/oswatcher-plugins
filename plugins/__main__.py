@@ -65,4 +65,4 @@ def runner(debug, commit_hash: str, plugin_type_str: str):
     # instantiate plugin
     with plugin_cls() as plugin:
         # __call__
-        plugin(commit)
+        plugin(commit, plugin_type_str)
