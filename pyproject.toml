@@ -15,7 +15,7 @@ runner = 'plugins.__main__:runner'
 
 [tool.poetry.dependencies]
 python = "^3.10"
-neogit = { git = "https://github.com/OSWatcher/neogit.git" }
+neogit = { git = "https://github.com/OSWatcher/neogit.git", tag = "v0.5" }
 poethepoet = "^0.26.1"
 ipdb = "^0.13.13"
 click = "^8.1.7"
