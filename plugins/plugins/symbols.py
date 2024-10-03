@@ -513,8 +513,8 @@ class SymbolsPlugin(AbstractPlugin):
         MATCH (b:Blob {hash: $blob_hash})
         WITH b
         UNWIND $unwind as p
-        MERGE (s:Symbol {name: p.sym_name})
-        MERGE (b)-[:HAS_SYMBOL {address: p.address}]->(s)
+        MERGE (s:Symbol {address: p.address})
+        MERGE (b)-[:HAS_SYMBOL {name: p.sym_name}]->(s)
         """
         self.neogit.db.cypher_query(query, {"blob_hash": blob_hash, "unwind": param_list})
         return len(symbols.items())
