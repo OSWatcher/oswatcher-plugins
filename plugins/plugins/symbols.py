@@ -365,7 +365,7 @@ class SymbolsPlugin(AbstractPlugin):
             if not ret:
                 raise ValueError("No CodeView found")
             guid, age, pdb_name = ret
-            self.logger.info("PDB: %s - GUID: %s (%s)", pdb_name, guid, age)
+            self.logger.info("Path: %s - PDB: %s - GUID: %s (%s)", blob_result[0], pdb_name, guid, age)
             return blob_hash, *ret
 
     @return_exceptions
