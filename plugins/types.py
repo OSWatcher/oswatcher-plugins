@@ -12,6 +12,13 @@ from neogit.model.neo import Commit, PluginRun
 from neogit.service import Neogit
 from neogit.utils import BetterContextManager
 
+QUERY_CREATE_UNIQUE_CONSTRAINT = """
+CREATE CONSTRAINT {name}
+IF NOT EXISTS
+FOR (n:{label})
+REQUIRE n.{property} IS UNIQUE
+""".strip()
+
 
 @define(auto_attribs=True)
 class UniqueConstraint:
@@ -67,7 +74,8 @@ class AbstractPlugin(BetterContextManager):
         """Ensure the constraints are in the database"""
         for constraint in self.constraints_data():
             for prop in constraint.property_list:
-                query = f"CREATE CONSTRAINT IF NOT EXISTS FOR (n:{constraint.label}) REQUIRE n.{prop} IS UNIQUE"
+                name = f"{constraint.label.lower()}_{prop}_unique"
+                query = QUERY_CREATE_UNIQUE_CONSTRAINT.format(name=name, label=constraint.label, property=prop)
                 self.neogit.db.cypher_query(query)
 
     def constraints_data(self) -> List[UniqueConstraint]:
