@@ -325,7 +325,7 @@ class SymbolsPlugin(AbstractPlugin):
 
     def constraints_data(self) -> lief.List[UniqueConstraint]:
         return [
-            UniqueConstraint(label="Symbol", property_list=["name"]),
+            UniqueConstraint(label="Symbol", property_list=["hash"]),
             UniqueConstraint(label="WinStruct", property_list=["hash"]),
             UniqueConstraint(label="WinStructField", property_list=["hash"]),
             UniqueConstraint(label="WinDataType", property_list=["hash"]),
@@ -358,7 +358,7 @@ class SymbolsPlugin(AbstractPlugin):
 
     @return_exceptions
     def stage_parse_code_view(self, blob_result: Tuple[PurePath, str]) -> Optional[Tuple[str, int, str]]:
-        self.logger.debug("Processing PE file: %s", blob_result[0])
+        self.logger.info("Processing PE file: %s", blob_result[0])
         blob_hash = blob_result[1]
         with self.downloaded_file(blob_hash) as local_file:
             ret = parse_code_view(local_file)
@@ -504,6 +504,7 @@ class SymbolsPlugin(AbstractPlugin):
             address = str(value["address"])
             param_list.append(
                 {
+                    "hash": hashlib.sha1(f"{address}".encode()).hexdigest(),
                     "sym_name": sym,
                     "address": address,
                 }
@@ -513,7 +514,7 @@ class SymbolsPlugin(AbstractPlugin):
         MATCH (b:Blob {hash: $blob_hash})
         WITH b
         UNWIND $unwind as p
-        MERGE (s:Symbol {address: p.address})
+        MERGE (s:Symbol {hash: p.hash, address: p.address})
         MERGE (b)-[:HAS_SYMBOL {name: p.sym_name}]->(s)
         """
         self.neogit.db.cypher_query(query, {"blob_hash": blob_hash, "unwind": param_list})
