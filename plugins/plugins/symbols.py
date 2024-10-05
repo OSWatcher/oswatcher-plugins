@@ -247,11 +247,8 @@ class SymbolsMerkleVisitor(MerkleVisitor):
             data = f"{merkle_node.hash}\n".encode()
             hash_obj.update(data)
             children[merkle_node.hash] = merkle_node
-        # merklize the data type
-        # need separator to distinguish between
-        # "Reserved" "10" "xxx"
-        # "Reserved1 "0" "xxx"
-        hash_obj.update(f"{node.name}-{node.offset}".encode())
+        # merklize the offset
+        hash_obj.update(f"{node.offset}".encode())
         merkle_node = WinStructFieldMerkleNode(
             hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, name=node.name, offset=node.offset, children=children
         )
@@ -466,8 +463,8 @@ class SymbolsPlugin(AbstractPlugin):
         WITH s
         UNWIND $unwind_param as x
         MATCH (d:WinDataType {hash: x.data_hash})
-        MERGE (f:WinStructField {hash: x.hash, name: x.name, offset: x.offset})
-        MERGE (s)-[:HAS_FIELD]->(f)-[:HAS_DATA_TYPE]->(d)
+        MERGE (f:WinStructField {hash: x.hash, offset: x.offset})
+        MERGE (s)-[:HAS_FIELD {name: x.name}]->(f)-[:HAS_DATA_TYPE]->(d)
         WITH s
         MATCH (b:Blob {hash: $blob_hash})
         WITH b, s
