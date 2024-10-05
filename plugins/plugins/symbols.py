@@ -265,7 +265,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
             data = f"{merkle_node.hash}\n".encode()
             hash_obj.update(data)
             children[member.name] = merkle_node
-        hash_obj.update(f"{node.name}-{node.size}-{node.kind.name}".encode())
+        hash_obj.update(f"{node.size}-{node.kind.name}".encode())
         merkle_node = WinStructMerkleNode(
             hash=hash_obj.hexdigest(),
             children=children,
@@ -462,7 +462,7 @@ class SymbolsPlugin(AbstractPlugin):
 
     def insert_struct_cypher(self, blob_hash: str, node: WinStructMerkleNode):
         query = """
-        MERGE (s:WinStruct {hash: $hash, name: $name, size: $size, kind: $kind})
+        MERGE (s:WinStruct {hash: $hash, size: $size, kind: $kind})
         WITH s
         UNWIND $unwind_param as x
         MATCH (d:WinDataType {hash: x.data_hash})
@@ -471,7 +471,7 @@ class SymbolsPlugin(AbstractPlugin):
         WITH s
         MATCH (b:Blob {hash: $blob_hash})
         WITH b, s
-        MERGE (b)-[:HAS_STRUCT]->(s)
+        MERGE (b)-[:HAS_STRUCT {name: $name}]->(s)
         """
         unwind_param = [
             {
