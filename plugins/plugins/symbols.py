@@ -101,13 +101,16 @@ class WinStructFieldNode(Node):
     name: str = field()
     field_data: Dict = field()
     offset: int = field(init=False)
+    data_type: str = field(init=False)
 
     def __attrs_post_init__(self):
         self.offset = self.field_data["offset"]
+        self.data_type = json.dumps(self.field_data["type"])
 
-    def iter_child_nodes(self) -> Generator[Node, None, None]:
-        # construct the subtype node
-        yield WinDataTypeNode(data_type=self.field_data["type"])
+    # store data type directly in the field node
+    # def iter_child_nodes(self) -> Generator[Node, None, None]:
+    #     # construct the subtype node
+    #     yield WinDataTypeNode(data_type=self.field_data["type"])
 
 
 @define(auto_attribs=True)
@@ -168,6 +171,7 @@ class WinDataTypeMerkleNode(MerkleNode):
 class WinStructFieldMerkleNode(MerkleNode):
     name: str = field(kw_only=True)
     offset: int = field(kw_only=True)
+    data_type: str = field(kw_only=True)
 
 
 @define(auto_attribs=True)
@@ -241,16 +245,16 @@ class SymbolsMerkleVisitor(MerkleVisitor):
         self, node: WinStructFieldNode, hash_obj: hashlib._Hash, *args, **kwargs
     ) -> VisitedNode:
         children = {}
-        for data_type in node.iter_child_nodes():
-            visited_node = self.visit(data_type)
-            merkle_node = visited_node.return_value
-            data = f"{merkle_node.hash}\n".encode()
-            hash_obj.update(data)
-            children[merkle_node.hash] = merkle_node
-        # merklize the offset
-        hash_obj.update(f"{node.offset}".encode())
+        # for data_type in node.iter_child_nodes():
+        #     visited_node = self.visit(data_type)
+        #     merkle_node = visited_node.return_value
+        #     data = f"{merkle_node.hash}\n".encode()
+        #     hash_obj.update(data)
+        #     children[merkle_node.hash] = merkle_node
+        # merklize the offset and the data type string
+        hash_obj.update(f"{node.offset}-{node.data_type}".encode())
         merkle_node = WinStructFieldMerkleNode(
-            hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, name=node.name, offset=node.offset, children=children
+            hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, name=node.name, offset=node.offset, data_type=node.data_type, children=children
         )
         return VisitedNode(node, merkle_node)
 
@@ -259,7 +263,8 @@ class SymbolsMerkleVisitor(MerkleVisitor):
         for member in node.iter_child_nodes():
             visited_node = self.visit(member)
             merkle_node = visited_node.return_value
-            data = f"{merkle_node.hash}\n".encode()
+            "field_name-field_hash"
+            data = f"{member.name}{merkle_node.hash}\n".encode()
             hash_obj.update(data)
             children[member.name] = merkle_node
         hash_obj.update(f"{node.size}-{node.kind.name}".encode())
@@ -462,9 +467,8 @@ class SymbolsPlugin(AbstractPlugin):
         MERGE (s:WinStruct {hash: $hash, size: $size, kind: $kind})
         WITH s
         UNWIND $unwind_param as x
-        MATCH (d:WinDataType {hash: x.data_hash})
-        MERGE (f:WinStructField {hash: x.hash, offset: x.offset})
-        MERGE (s)-[:HAS_FIELD {name: x.name}]->(f)-[:HAS_DATA_TYPE]->(d)
+        MERGE (f:WinStructField {hash: x.hash, offset: x.offset, data_type: x.data_type})
+        MERGE (s)-[:HAS_FIELD {name: x.name}]->(f)
         WITH s
         MATCH (b:Blob {hash: $blob_hash})
         WITH b, s
@@ -475,7 +479,7 @@ class SymbolsPlugin(AbstractPlugin):
                 "hash": child_node.hash,
                 "name": child_name,
                 "offset": child_node.offset,
-                "data_hash": next(iter(child_node.children.values())).hash,
+                "data_type": child_node.data_type,
             }
             for child_name, child_node in node.children.items()
         ]
