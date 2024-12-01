@@ -23,6 +23,7 @@ from neogit.core.visitor import VisitedNode
 from neogit.model.neo import Commit
 from volatility3.framework.contexts import Context
 from volatility3.framework.symbols.windows.pdbconv import PdbReader, PdbRetreiver
+from neogit.service.neogit import cypher_query_with_backoff
 
 from plugins.types import AbstractPlugin, UniqueConstraint
 
@@ -449,7 +450,7 @@ class SymbolsPlugin(AbstractPlugin):
             }
             for hash, x in node.children.items()
         ]
-        self.neogit.db.cypher_query(
+        cypher_query_with_backoff(
             query,
             {
                 "hash": node.hash,
@@ -483,7 +484,7 @@ class SymbolsPlugin(AbstractPlugin):
             }
             for child_name, child_node in node.children.items()
         ]
-        self.neogit.db.cypher_query(
+        cypher_query_with_backoff(
             query,
             {
                 "blob_hash": blob_hash,
@@ -518,5 +519,5 @@ class SymbolsPlugin(AbstractPlugin):
         MERGE (s:Symbol {hash: p.hash, address: p.address})
         MERGE (b)-[:HAS_SYMBOL {name: p.sym_name}]->(s)
         """
-        self.neogit.db.cypher_query(query, {"blob_hash": blob_hash, "unwind": param_list})
+        cypher_query_with_backoff(query, {"blob_hash": blob_hash, "unwind": param_list})
         return len(symbols.items())
