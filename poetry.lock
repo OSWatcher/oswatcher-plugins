@@ -843,7 +843,7 @@ pyarrow = ["pyarrow (>=1.0.0)"]
 
 [[package]]
 name = "neogit"
-version = "0.9.0"
+version = "0.10.0"
 description = "Git-like tool backed by Neo4j"
 optional = false
 python-versions = "^3.8.1"
@@ -872,8 +872,8 @@ types-PyYAML = "^6.0.0"
 [package.source]
 type = "git"
 url = "https://github.com/OSWatcher/neogit.git"
-reference = "v0.9"
-resolved_reference = "29a0c31bfe6408fd4bf0b9f25f6e76e1b157e970"
+reference = "v0.10"
+resolved_reference = "980b836f10d2d46547bac7958556a10ba55e5a21"
 
 [[package]]
 name = "neomodel"
@@ -1630,4 +1630,4 @@ test = ["pytest"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "d68ef1feab21de440f568924014f9cc3ff081901610c60fc1039c5cb7d15f871"
+content-hash = "958dbd655b012921778a0059dccf764917fd88ea201fb5a3477f85eaf4f56d42"
