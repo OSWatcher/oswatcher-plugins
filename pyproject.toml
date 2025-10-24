@@ -27,6 +27,10 @@ volatility3 = "^2.5.2"
 regipy = "^4.1.1"
 jsonschema = "^4.21.1"
 pypeln = "^0.4.9"
+# setuptools required for pkg_resources compatibility
+# pypeln -> stopit -> pkg_resources (may be missing in some virtual environments)
+# See: https://github.com/glenfant/stopit/issues/32
+setuptools = "*"
 
 
 [tool.poetry.group.dev.dependencies]
