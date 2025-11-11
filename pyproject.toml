@@ -43,6 +43,8 @@ appdirs-stubs = "^0.1.0"
 types-appdirs = "^1.4.3.1"
 ipdb = "^0.13.13"
 pdbpp = "^0.10.3"
+pytest = "^8.0.0"
+pytest-cov = "^4.0.0"
 
 [tool.poe.tasks]
 fmt = "black ."
@@ -51,6 +53,8 @@ _isort = "isort ."
 lint = ["_flake8", "_isort"]
 typing = "mypy -p plugins"
 ccode = ["fmt", "lint"]
+test = "pytest tests/ -v"
+test-cov = "pytest tests/ --cov=plugins --cov-report=term"
 
 [tool.black]
 line-length = 120
