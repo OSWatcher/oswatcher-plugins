@@ -21,9 +21,9 @@ from neogit.core.merkle import MerkleVisitor
 from neogit.core.model import MerkleLabel, MerkleNode, Node
 from neogit.core.visitor import VisitedNode
 from neogit.model.neo import Commit
+from neogit.service.neogit import cypher_query_with_backoff
 from volatility3.framework.contexts import Context
 from volatility3.framework.symbols.windows.pdbconv import PdbReader, PdbRetreiver
-from neogit.service.neogit import cypher_query_with_backoff
 
 from plugins.types import AbstractPlugin, UniqueConstraint
 
@@ -255,7 +255,12 @@ class SymbolsMerkleVisitor(MerkleVisitor):
         # merklize the offset and the data type string
         hash_obj.update(f"{node.offset}-{node.data_type}".encode())
         merkle_node = WinStructFieldMerkleNode(
-            hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, name=node.name, offset=node.offset, data_type=node.data_type, children=children
+            hash=hash_obj.hexdigest(),
+            label=MerkleLabel.Blob,
+            name=node.name,
+            offset=node.offset,
+            data_type=node.data_type,
+            children=children,
         )
         return VisitedNode(node, merkle_node)
 

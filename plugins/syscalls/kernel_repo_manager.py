@@ -1,8 +1,10 @@
 """Kernel repository management using git show for blob extraction."""
 
-import git
 from pathlib import Path
+
+import git
 from git.exc import GitCommandError
+
 from .exceptions import KernelVersionNotFoundError, PreKernel2011Error, SyscallFileNotFoundError
 
 
@@ -19,11 +21,17 @@ def ensure_kernel_repo(cache_dir: str) -> git.Repo:
     linux_path = cache_path / "linux"
 
     if linux_path.exists() and (linux_path / ".git").exists():
-        # Repository already exists, open it
-        return git.Repo(linux_path)
+        # Repository already exists, open it and fetch latest tags
+        repo = git.Repo(linux_path)
+        # Fetch latest tags
+        repo.remotes.origin.fetch(tags=True)
+        return repo
     else:
         # Clone the repository
-        return git.Repo.clone_from("https://github.com/torvalds/linux.git", linux_path)
+        repo = git.Repo.clone_from("https://github.com/torvalds/linux.git", linux_path)
+        # Fetch tags (clone doesn't fetch tags by default in some Git versions)
+        repo.remotes.origin.fetch(tags=True)
+        return repo
 
 
 def get_file_content(repo: git.Repo, version: str, file_path: str) -> str:
@@ -42,21 +50,21 @@ def get_file_content(repo: git.Repo, version: str, file_path: str) -> str:
         SyscallFileNotFoundError: If file doesn't exist at that version
     """
     try:
-        return repo.git.show(f"{version}:{file_path}")
+        return repo.git.show(f"{version}:{file_path}")  # noqa: E231
     except GitCommandError as e:
         error_str = str(e)
         # Check for invalid revision/version
         if "bad revision" in error_str.lower() or "unknown revision" in error_str.lower():
-            raise KernelVersionNotFoundError(f"Kernel version {version} not found in repository")
+            raise KernelVersionNotFoundError(f"Kernel version {version} not found in repository")  # noqa: E713
         # Check for path not found in tree
         elif "path" in error_str and "not in" in error_str:
-            raise SyscallFileNotFoundError(f"File {file_path} not found in version {version}")
+            raise SyscallFileNotFoundError(f"File {file_path} not found in version {version}")  # noqa: E713
         # Check for other "does not exist" errors
         elif "does not exist" in error_str:
             if version in error_str:
-                raise KernelVersionNotFoundError(f"Kernel version {version} not found in repository")
+                raise KernelVersionNotFoundError(f"Kernel version {version} not found in repository")  # noqa: E713
             else:
-                raise SyscallFileNotFoundError(f"File {file_path} not found in version {version}")
+                raise SyscallFileNotFoundError(f"File {file_path} not found in version {version}")  # noqa: E713
         # Re-raise original error if we can't classify it
         raise
 
@@ -73,7 +81,7 @@ def get_syscall_files(repo: git.Repo, version: str) -> tuple[str, str]:
 
     Raises:
         PreKernel2011Error: If kernel predates 2011 syscall table format
-        KernelVersionNotFoundError: If kernel version doesn't exist  
+        KernelVersionNotFoundError: If kernel version doesn't exist
         SyscallFileNotFoundError: If syscall files don't exist
     """
     # Try post-2011 location first
@@ -93,6 +101,6 @@ def get_syscall_files(repo: git.Repo, version: str) -> tuple[str, str]:
                 # If syscalls.h exists but .tbl doesn't, it's pre-2011
                 raise PreKernel2011Error(f"Kernel {version} predates 2011 syscall table format")
             except (SyscallFileNotFoundError, KernelVersionNotFoundError):
-                # Neither file exists - version might be invalid  
+                # Neither file exists - version might be invalid
                 raise KernelVersionNotFoundError(f"Kernel version {version} not found")
         raise
