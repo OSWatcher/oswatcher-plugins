@@ -31,6 +31,7 @@ pypeln = "^0.4.9"
 # pypeln -> stopit -> pkg_resources (may be missing in some virtual environments)
 # See: https://github.com/glenfant/stopit/issues/32
 setuptools = "*"
+gitpython = "^3.1.0"
 
 
 [tool.poetry.group.dev.dependencies]
