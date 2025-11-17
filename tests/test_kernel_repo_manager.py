@@ -71,7 +71,9 @@ def test_get_file_content_file_not_found(temp_cache_dir):
 
     mock_repo = Mock()
     # Error message should not contain version to be detected as file error
-    mock_repo.git.show.side_effect = GitCommandError("show", 128, "path 'arch/x86/entry/syscalls/syscall_64.tbl' does not exist")
+    mock_repo.git.show.side_effect = GitCommandError(
+        "show", 128, "path 'arch/x86/entry/syscalls/syscall_64.tbl' does not exist"
+    )
 
     with pytest.raises(
         SyscallFileNotFoundError, match="File arch/x86/entry/syscalls/syscall_64.tbl not found in version v5.15"
