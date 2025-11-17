@@ -66,13 +66,15 @@ def test_get_file_content_file_not_found(temp_cache_dir):
     """Test file not found error handling."""
     from git.exc import GitCommandError
 
+    from plugins.syscalls.exceptions import SyscallFileNotFoundError
     from plugins.syscalls.kernel_repo_manager import get_file_content
 
     mock_repo = Mock()
-    mock_repo.git.show.side_effect = GitCommandError("show", 128, "does not exist in 'v5.15'")
+    # Error message should not contain version to be detected as file error
+    mock_repo.git.show.side_effect = GitCommandError("show", 128, "path 'arch/x86/entry/syscalls/syscall_64.tbl' does not exist")
 
     with pytest.raises(
-        FileNotFoundError, match="File arch/x86/entry/syscalls/syscall_64.tbl not found in version v5.15"
+        SyscallFileNotFoundError, match="File arch/x86/entry/syscalls/syscall_64.tbl not found in version v5.15"
     ):
         get_file_content(mock_repo, "v5.15", "arch/x86/entry/syscalls/syscall_64.tbl")
 
@@ -99,6 +101,7 @@ def test_get_syscall_files_pre_2011_fallback():
     """Test fallback to pre-2011 syscall file locations."""
     from git.exc import GitCommandError
 
+    from plugins.syscalls.exceptions import PreKernel2011Error
     from plugins.syscalls.kernel_repo_manager import get_syscall_files
 
     mock_repo = Mock()
@@ -108,5 +111,5 @@ def test_get_syscall_files_pre_2011_fallback():
         "/* syscalls.h content */",  # syscalls.h succeeds
     ]
 
-    with pytest.raises(ValueError, match="Pre-2011 kernel syscall extraction not implemented"):
+    with pytest.raises(PreKernel2011Error, match="Kernel v2.6.32 predates 2011 syscall table format"):
         get_syscall_files(mock_repo, "v2.6.32")
