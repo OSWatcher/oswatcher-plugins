@@ -9,6 +9,7 @@ from neogit.model.neo import Commit
 from plugins.syscalls.exceptions import KernelVersionNotFoundError, PreKernel2011Error, SyscallFileNotFoundError
 from plugins.syscalls.filesystem import KernelInfo, find_kernel_versions, get_boot_directory
 from plugins.syscalls.kernel_repo_manager import ensure_kernel_repo, get_syscall_files
+from plugins.syscalls.nodes import SyscallsMerkleVisitor, SyscallTableNode
 from plugins.syscalls.syscall_table_parser import parse_syscall_table_line
 from plugins.syscalls.syscalls_h_parser import parse_syscall_signature
 from plugins.types import AbstractPlugin
@@ -61,8 +62,8 @@ class SyscallsPlugin(AbstractPlugin):
         # Extract syscalls from Linux kernel repository
         syscall_data = self._extract_syscalls_from_repo(kernel_info_list)
 
-        # Log results
-        self._log_syscall_results(syscall_data)
+        # Transform to Nodes and visit with MerkleVisitor
+        self._transform_and_visit(kernel_info_list, syscall_data)
 
         self.logger.info(f"Syscall extraction complete for commit {commit.hash}")
 
@@ -138,28 +139,42 @@ class SyscallsPlugin(AbstractPlugin):
 
         return syscalls
 
-    def _log_syscall_results(self, syscall_data: Dict[str, List[dict]]):
-        """Log syscall extraction results.
+    def _transform_and_visit(self, kernel_info_list: List[KernelInfo], syscall_data: Dict[str, List[dict]]):
+        """Transform syscall data to Nodes and visit with MerkleVisitor.
 
         Args:
+            kernel_info_list: List of kernel information
             syscall_data: Dictionary mapping kernel version to syscall list
         """
         if not syscall_data:
-            self.logger.info("No syscall data extracted")
+            self.logger.info("No syscall data to transform")
             return
 
-        for version, syscalls in syscall_data.items():
-            self.logger.info(f"\n=== Syscalls for {version} ===")
-            self.logger.info(f"Total: {len(syscalls)} syscalls")
+        # Create visitor (threaded for async processing)
+        with SyscallsMerkleVisitor(thread=True) as visitor:
+            # Create SyscallTableNode for each kernel
+            for kernel_info in kernel_info_list:
+                version_data = syscall_data.get(kernel_info.version)
+                if not version_data:
+                    continue
 
-            # Log first 5 as examples
-            for syscall in syscalls[:5]:
-                params = syscall.get("parameters")
-                if params:
-                    params_str = ", ".join(params)
-                    self.logger.info(f"  {syscall['index']: 3d}: {syscall['name']}({params_str})")
-                else:
-                    self.logger.info(f"  {syscall['index']: 3d}: {syscall['name']}()")
+                # Create SyscallTableNode
+                table_node = SyscallTableNode(architecture=kernel_info.architecture, syscalls=version_data)
 
-            if len(syscalls) > 5:
-                self.logger.info(f"  ... and {len(syscalls) - 5} more")
+                # Visit to compute hashes
+                self.logger.info(
+                    f"Creating SyscallTableNode for {kernel_info.version} "
+                    f"({kernel_info.architecture}) with {len(version_data)} syscalls"
+                )
+                visitor.run_visit(table_node)
+
+            # Iterate visited nodes (includes both SyscallMerkleNodes and SyscallTableMerkleNodes)
+            for visited_node in visitor.as_gen():
+                merkle_node = visited_node.return_value
+                # Only log SyscallTableMerkleNodes (skip individual syscall children)
+                if hasattr(merkle_node, "architecture"):
+                    self.logger.info(
+                        f"Created SyscallTableMerkleNode: hash={merkle_node.hash[:8]}... "
+                        f"arch={merkle_node.architecture} children={len(merkle_node.children)}"
+                    )
+                    # TODO: Insert into Neo4j (next phase)
