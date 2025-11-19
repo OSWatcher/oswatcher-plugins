@@ -7,7 +7,7 @@ from attrs import define
 from neogit.model.neo import Commit
 
 from plugins.syscalls.exceptions import KernelVersionNotFoundError, PreKernel2011Error, SyscallFileNotFoundError
-from plugins.syscalls.filesystem import find_kernel_versions, get_boot_directory
+from plugins.syscalls.filesystem import KernelInfo, find_kernel_versions, get_boot_directory
 from plugins.syscalls.kernel_repo_manager import ensure_kernel_repo, get_syscall_files
 from plugins.syscalls.syscall_table_parser import parse_syscall_table_line
 from plugins.syscalls.syscalls_h_parser import parse_syscall_signature
@@ -48,26 +48,29 @@ class SyscallsPlugin(AbstractPlugin):
             return
 
         # Find kernel versions from vmlinuz files - using public function
-        kernel_versions = find_kernel_versions(boot_tree)
-        if not kernel_versions:
+        kernel_info_list = find_kernel_versions(boot_tree, self)
+        if not kernel_info_list:
             self.logger.info("No kernel files found in /boot")
             return
 
-        self.logger.info(f"Found {len(kernel_versions)} kernel version(s): {', '.join(kernel_versions)}")
+        self.logger.info(
+            f"Found {len(kernel_info_list)} kernel(s): "
+            + ", ".join(f"{k.filename} ({k.architecture})" for k in kernel_info_list)
+        )
 
         # Extract syscalls from Linux kernel repository
-        syscall_data = self._extract_syscalls_from_repo(kernel_versions)
+        syscall_data = self._extract_syscalls_from_repo(kernel_info_list)
 
         # Log results
         self._log_syscall_results(syscall_data)
 
         self.logger.info(f"Syscall extraction complete for commit {commit.hash}")
 
-    def _extract_syscalls_from_repo(self, kernel_versions: List[str]) -> Dict[str, List[dict]]:
+    def _extract_syscalls_from_repo(self, kernel_info_list: List[KernelInfo]) -> Dict[str, List[dict]]:
         """Extract syscall information from Linux kernel Git repository.
 
         Args:
-            kernel_versions: List of kernel versions to extract (e.g., ['v5.15'])
+            kernel_info_list: List of kernel information to extract
 
         Returns:
             Dictionary mapping kernel version to list of syscall data
@@ -78,12 +81,13 @@ class SyscallsPlugin(AbstractPlugin):
         repo = ensure_kernel_repo(cache_dir)
 
         # Extract syscalls for each kernel version
-        for version in kernel_versions:
+        for kernel_info in kernel_info_list:
+            version = kernel_info.version
             try:
                 syscalls = self._extract_version_syscalls(repo, version)
                 if syscalls:
                     syscall_data[version] = syscalls
-                    self.logger.info(f"Extracted {len(syscalls)} syscalls for {version}")
+                    self.logger.info(f"Extracted {len(syscalls)} syscalls for {version} ({kernel_info.architecture})")
             except PreKernel2011Error as e:
                 self.logger.warning(f"Skipping {version}: {e}")
             except KernelVersionNotFoundError as e:
