@@ -93,4 +93,6 @@ filterwarnings = [
     "ignore:Relying on Driver's destructor to close the session:DeprecationWarning:neo4j",
     # neomodel datetime warnings
     "ignore:datetime.datetime.utcfromtimestamp\\(\\) is deprecated:DeprecationWarning:neomodel",
+    # stopit pkg_resources deprecation (stopit is unmaintained dependency of pypeln)
+    "ignore:pkg_resources is deprecated as an API:UserWarning:stopit",
 ]
