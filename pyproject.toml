@@ -14,8 +14,8 @@ build-backend = "poetry.core.masonry.api"
 runner = 'plugins.__main__:runner'
 
 [tool.poetry.dependencies]
-python = "^3.10"
-neogit = { git = "https://github.com/OSWatcher/neogit.git", tag = "v0.10" }
+python = "^3.11"
+neogit = { git = "https://github.com/OSWatcher/neogit.git", tag = "v0.11" }
 poethepoet = "^0.26.1"
 ipdb = "^0.13.13"
 click = "^8.1.7"
