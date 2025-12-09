@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "plugins"
-version = "0.11.0"
+version = "0.12.0"
 description = ""
 authors = ["Mathieu Tarral <mathieu.tarral@protonmail.com>"]
 license = "private"
@@ -15,7 +15,7 @@ runner = 'plugins.__main__:runner'
 
 [tool.poetry.dependencies]
 python = "^3.11"
-neogit = { git = "https://github.com/OSWatcher/neogit.git", tag = "v0.12" }
+neogit = { git = "https://github.com/OSWatcher/neogit.git", tag = "v0.13" }
 poethepoet = "^0.26.1"
 ipdb = "^0.13.13"
 click = "^8.1.7"
