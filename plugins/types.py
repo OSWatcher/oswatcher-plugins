@@ -4,7 +4,7 @@ import logging
 import tempfile
 from abc import abstractmethod
 from contextlib import contextmanager, suppress
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List
 
 from attrs import Factory, define, field
@@ -64,8 +64,8 @@ class AbstractPlugin(BetterContextManager):
                 plugin_run_node.save()
             # ensure connected
             commit.plugin.connect(plugin_run_node)
-            # update plugin run datetime
-            setattr(plugin_run_node, plugin_name, datetime.now())
+            # update plugin run with datetime (timzeone-aware UTC)
+            setattr(plugin_run_node, plugin_name, datetime.now(timezone.utc))
             plugin_run_node.save()
 
         self.logger.info("Plugin run node updated for commit %s", commit.hash)
