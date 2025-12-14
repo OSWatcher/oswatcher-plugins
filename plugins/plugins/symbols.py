@@ -25,6 +25,7 @@ from neogit.service.neogit import cypher_query_with_backoff
 from volatility3.framework.contexts import Context
 from volatility3.framework.symbols.windows.pdbconv import PdbReader, PdbRetreiver
 
+from plugins.plugins.symbols_service import filter_valid_filenames, parse_symbols_from_json
 from plugins.types import AbstractPlugin, UniqueConstraint
 
 
@@ -351,7 +352,8 @@ class SymbolsPlugin(AbstractPlugin):
         RETURN [rel IN relationships(path) | rel.name] AS parts, b.hash
         """
         rows, _ = self.neogit.db.cypher_query(query, {"mime_type": self.__class__.PE_MIME_TYPE, "root_hash": fs.hash})
-        blob_results = ((PurePath(*row[0]), row[1]) for row in rows if PurePath(*row[0]).name in self.FILTER_FILENAME)
+        all_blobs = [(PurePath(*row[0]), row[1]) for row in rows]
+        blob_results = filter_valid_filenames(all_blobs, self.FILTER_FILENAME)
         stage = pl.process.map(self.stage_parse_code_view, blob_results, workers=4)
         stage = pl.process.map(self.stage_process_pdb, stage, workers=self.max_workers, maxsize=self.max_workers)
         for ret in stage:
@@ -506,21 +508,14 @@ class SymbolsPlugin(AbstractPlugin):
         )
 
     def insert_symbols(self, blob_hash: str, symbols: Dict) -> int:
+        # Parse symbols using pure function
+        parsed_symbols = parse_symbols_from_json(symbols)
+
+        # Convert to param format for Neo4j
         param_list = []
-        for sym, value in sorted(symbols.items()):
-            if sym.startswith("?") or sym.startswith("$"):
-                continue
-            # store addresses as string to avoid the integer being broken into high and low
-            # by Neo4j javascript driver, resulting into GraphQL issues
-            address = str(value["address"])
-            param_list.append(
-                {
-                    "hash": hashlib.sha1(f"{address}".encode()).hexdigest(),
-                    "sym_name": sym,
-                    "address": address,
-                }
-            )
-            self.logger.debug("Symbol %s (%s)", sym, address)
+        for symbol in parsed_symbols:
+            param_list.append({"hash": symbol["hash"], "sym_name": symbol["name"], "address": symbol["address"]})
+            self.logger.debug("Symbol %s (%s)", symbol["name"], symbol["address"])
         query = """
         MATCH (b:Blob {hash: $blob_hash})
         WITH b
