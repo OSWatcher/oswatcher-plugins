@@ -21,10 +21,10 @@ from neogit.core.merkle import MerkleVisitor
 from neogit.core.model import MerkleLabel, MerkleNode, Node
 from neogit.core.visitor import VisitedNode
 from neogit.model.neo import Commit
-from neogit.service.neogit import cypher_query_with_backoff
 from volatility3.framework.contexts import Context
 from volatility3.framework.symbols.windows.pdbconv import PdbReader, PdbRetreiver
 
+from plugins.plugins.symbols_repository import SymbolsRepository
 from plugins.plugins.symbols_service import filter_valid_filenames, parse_symbols_from_json
 from plugins.types import AbstractPlugin, UniqueConstraint
 
@@ -327,10 +327,18 @@ def retrieve_pdb(guid, age, pdb_name) -> str:
 @define(auto_attribs=True)
 class SymbolsPlugin(AbstractPlugin):
     max_workers: int = field(init=False, default=os.cpu_count())
+    _repository: SymbolsRepository = field(init=False, default=None)
 
     PE_MIME_TYPE = "application/vnd.microsoft.portable-executable"
     # only process these filenames for now
     FILTER_FILENAME = ["ntoskrnl.exe", "ntdll.dll", "kernel32.dll"]
+
+    @property
+    def repository(self) -> SymbolsRepository:
+        """Lazy-initialize repository."""
+        if self._repository is None:
+            self._repository = SymbolsRepository(self.neogit)
+        return self._repository
 
     def constraints_data(self) -> lief.List[UniqueConstraint]:
         return [
@@ -343,16 +351,9 @@ class SymbolsPlugin(AbstractPlugin):
     def run(self, commit: Commit):
         # identify every PE file Blob
         fs = commit.filesystem.single()
-        query = """
-        MATCH path = (r:Tree {hash: $root_hash})-[:HAS_CHILD_TREE|HAS_CHILD_BLOB*]->(b:Blob)
-        WHERE EXISTS {
-                MATCH (b)-[:HAS_MIME_TYPE]->(m:MimeType)
-                WHERE m.mime = $mime_type
-            }
-        RETURN [rel IN relationships(path) | rel.name] AS parts, b.hash
-        """
-        rows, _ = self.neogit.db.cypher_query(query, {"mime_type": self.__class__.PE_MIME_TYPE, "root_hash": fs.hash})
-        all_blobs = [(PurePath(*row[0]), row[1]) for row in rows]
+
+        # Use repository to query PE blobs
+        all_blobs = self.repository.query_pe_blobs(fs.hash, self.__class__.PE_MIME_TYPE)
         blob_results = filter_valid_filenames(all_blobs, self.FILTER_FILENAME)
         stage = pl.process.map(self.stage_parse_code_view, blob_results, workers=4)
         stage = pl.process.map(self.stage_process_pdb, stage, workers=self.max_workers, maxsize=self.max_workers)
@@ -418,94 +419,20 @@ class SymbolsPlugin(AbstractPlugin):
                 for node in visitor.as_gen():
                     merkle_node = node.return_value
                     if isinstance(merkle_node, WinDataTypeMerkleNode):
-                        self.insert_windatatype_cypher(merkle_node)
+                        self.repository.insert_data_type(merkle_node)
                     if isinstance(merkle_node, WinStructMerkleNode):
-                        self.insert_struct_cypher(blob_hash, merkle_node)
+                        unwind_param = [
+                            {
+                                "hash": child_node.hash,
+                                "name": child_name,
+                                "offset": child_node.offset,
+                                "data_type": child_node.data_type,
+                            }
+                            for child_name, child_node in merkle_node.children.items()
+                        ]
+                        self.repository.insert_struct(blob_hash, merkle_node, unwind_param)
 
         return len(j_pdb.items())
-
-    def insert_windatatype_cypher(self, node: WinDataTypeMerkleNode):
-        query = """
-        MERGE (d:WinDataType {hash: $hash})  // Ensure 'hash' uniquely identifies 'WinDataType'
-        ON CREATE SET
-            d.type = CASE WHEN $type IS NOT NULL THEN $type END,
-            d.name = CASE WHEN $name IS NOT NULL THEN $name END,
-            d.array_counter = CASE WHEN $array_counter IS NOT NULL THEN $array_counter END,
-            d.bit_position = CASE WHEN $bit_position IS NOT NULL THEN $bit_position END,
-            d.bit_length = CASE WHEN $bit_length IS NOT NULL THEN $bit_length END
-        ON MATCH SET
-            d.type = CASE WHEN $type IS NOT NULL THEN $type END,
-            d.name = CASE WHEN $name IS NOT NULL THEN $name END,
-            d.array_counter = CASE WHEN $array_counter IS NOT NULL THEN $array_counter END,
-            d.bit_position = CASE WHEN $bit_position IS NOT NULL THEN $bit_position END,
-            d.bit_length = CASE WHEN $bit_length IS NOT NULL THEN $bit_length END
-        WITH d
-        UNWIND $children AS child
-        MERGE (c:WinDataType {hash: child.hash})  // Assuming 'hash' is unique for child nodes too
-        ON CREATE SET
-            c.type = CASE WHEN child.type IS NOT NULL THEN child.type END,
-            c.name = CASE WHEN child.name IS NOT NULL THEN child.name END,
-            c.array_counter = CASE WHEN child.array_counter IS NOT NULL THEN child.array_counter END,
-            c.bit_position = CASE WHEN child.bit_position IS NOT NULL THEN child.bit_position END,
-            c.bit_length = CASE WHEN child.bit_length IS NOT NULL THEN child.bit_length END
-        MERGE (d)-[:HAS_DATA_TYPE]->(c)
-        """
-        children = [
-            {
-                "hash": x.hash,
-                "type": x.kind.name,
-                "name": x.name,
-                "array_counter": x.array_counter,
-                "bit_position": x.bit_position,
-                "bit_length": x.bit_length,
-            }
-            for hash, x in node.children.items()
-        ]
-        cypher_query_with_backoff(
-            query,
-            {
-                "hash": node.hash,
-                "type": node.kind.name,
-                "name": node.name,
-                "array_counter": node.array_counter,
-                "bit_position": node.bit_position,
-                "bit_length": node.bit_length,
-                "children": children,
-            },
-        )
-
-    def insert_struct_cypher(self, blob_hash: str, node: WinStructMerkleNode):
-        query = """
-        MERGE (s:WinStruct {hash: $hash, size: $size, kind: $kind})
-        WITH s
-        UNWIND $unwind_param as x
-        MERGE (f:WinStructField {hash: x.hash, offset: x.offset, data_type: x.data_type})
-        MERGE (s)-[:HAS_FIELD {name: x.name}]->(f)
-        WITH s
-        MATCH (b:Blob {hash: $blob_hash})
-        WITH b, s
-        MERGE (b)-[:HAS_STRUCT {name: $name}]->(s)
-        """
-        unwind_param = [
-            {
-                "hash": child_node.hash,
-                "name": child_name,
-                "offset": child_node.offset,
-                "data_type": child_node.data_type,
-            }
-            for child_name, child_node in node.children.items()
-        ]
-        cypher_query_with_backoff(
-            query,
-            {
-                "blob_hash": blob_hash,
-                "unwind_param": unwind_param,
-                "hash": node.hash,
-                "name": node.name,
-                "size": node.size,
-                "kind": node.kind.name,
-            },
-        )
 
     def insert_symbols(self, blob_hash: str, symbols: Dict) -> int:
         # Parse symbols using pure function
@@ -516,12 +443,7 @@ class SymbolsPlugin(AbstractPlugin):
         for symbol in parsed_symbols:
             param_list.append({"hash": symbol["hash"], "sym_name": symbol["name"], "address": symbol["address"]})
             self.logger.debug("Symbol %s (%s)", symbol["name"], symbol["address"])
-        query = """
-        MATCH (b:Blob {hash: $blob_hash})
-        WITH b
-        UNWIND $unwind as p
-        MERGE (s:Symbol {hash: p.hash, address: p.address})
-        MERGE (b)-[:HAS_SYMBOL {name: p.sym_name}]->(s)
-        """
-        cypher_query_with_backoff(query, {"blob_hash": blob_hash, "unwind": param_list})
+
+        # Use repository to insert symbols
+        self.repository.insert_symbols(blob_hash, param_list)
         return len(symbols.items())
