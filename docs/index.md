@@ -44,6 +44,7 @@ Conceptual discussions of architecture and design.
 
 - [Architecture](explanation/architecture.md) - System design overview
 - [Merkle Pattern](explanation/merkle-pattern.md) - Content-addressed storage
+- [Symbols Plugin](explanation/symbols-plugin.md) - Deep dive into PDB symbol extraction
 
 ---
 
