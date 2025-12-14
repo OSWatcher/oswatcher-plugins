@@ -7,7 +7,7 @@ import logging
 import os
 import tempfile
 from binascii import hexlify
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from enum import Enum, auto
 from pathlib import Path, PurePath
 from typing import Dict, Generator, Optional, Tuple
@@ -358,11 +358,14 @@ class SymbolsPlugin(AbstractPlugin):
             if isinstance(ret, BaseException):
                 self.logger.error("Failed to process PDB: %s: %s", type(ret).__name__, ret)
                 continue
-            blob_hash, pdb_name, tmp_file = ret
-            with temporary_file_context(tmp_file) as tmp_file:
-                with open(tmp_file, "r") as f:
+            blob_hash, pdb_name, tmp_file_path = ret
+            try:
+                with open(tmp_file_path, "r") as f:
                     j_data = json.load(f)
-            self.parse_pdb_json(blob_hash, pdb_name, j_data)
+                self.parse_pdb_json(blob_hash, pdb_name, j_data)
+            finally:
+                with suppress(FileNotFoundError):
+                    os.remove(tmp_file_path)
 
     @return_exceptions
     def stage_parse_code_view(self, blob_result: Tuple[PurePath, str]) -> Optional[Tuple[str, int, str]]:
