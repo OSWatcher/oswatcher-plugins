@@ -382,13 +382,13 @@ class SymbolsPlugin(AbstractPlugin):
         try:
             location = retrieve_pdb(guid, age, pdb_name)
         except Exception as e:
-            raise ValueError("Failed to retrieve PDB %s on %s", pdb_name, blob_hash) from e
+            raise ValueError(f"Failed to retrieve PDB {pdb_name} on {blob_hash}") from e
         logging.debug(location)
         ctx = Context()
         try:
             j_data = PdbReader(ctx, location).get_json()
         except Exception as e:
-            raise ValueError("Failed to parse PDB %s on %s", pdb_name, blob_hash) from e
+            raise ValueError(f"Failed to parse PDB {pdb_name} on {blob_hash}") from e
         with tempfile.NamedTemporaryFile(delete=False, mode="w+") as tmp_file:
             json.dump(j_data, tmp_file)
             self.logger.debug("PDB: %s - JSON file: %s", pdb_name, tmp_file.name)
