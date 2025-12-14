@@ -356,7 +356,7 @@ class SymbolsPlugin(AbstractPlugin):
         stage = pl.process.map(self.stage_process_pdb, stage, workers=self.max_workers, maxsize=self.max_workers)
         for ret in stage:
             if isinstance(ret, BaseException):
-                # self.logger.error("Failed to handle PDB: %s", ret)
+                self.logger.error("Failed to process PDB: %s: %s", type(ret).__name__, ret)
                 continue
             blob_hash, pdb_name, tmp_file = ret
             with temporary_file_context(tmp_file) as tmp_file:
