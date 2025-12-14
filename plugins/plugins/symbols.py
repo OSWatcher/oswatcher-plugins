@@ -391,6 +391,7 @@ class SymbolsPlugin(AbstractPlugin):
             raise ValueError(f"Failed to parse PDB {pdb_name} on {blob_hash}") from e
         with tempfile.NamedTemporaryFile(delete=False, mode="w+") as tmp_file:
             json.dump(j_data, tmp_file)
+            tmp_file.flush()
             self.logger.debug("PDB: %s - JSON file: %s", pdb_name, tmp_file.name)
             return blob_hash, pdb_name, Path(tmp_file.name)
 
