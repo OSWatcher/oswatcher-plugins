@@ -338,6 +338,31 @@ def handle_pdb(self, blob_hash: str) -> Tuple[str, str, Path]:
 }
 ```
 
+#### Manual PDB Extraction (Testing/Development)
+
+For testing or offline development, you can manually extract PDB JSON using Volatility3's `pdbconv.py` tool:
+
+```bash
+# Download and convert PDB to JSON
+python volatility3/framework/symbols/windows/pdbconv.py \
+    -g 55678bc384f099b6ed05e9e39046924a1 \
+    -p ntkrnlmp.pdb \
+    -o ntkrnlmp.json
+```
+
+**Parameters**:
+- `-g`: PDB GUID + age (concatenated, typically from PE debug directory)
+- `-p`: PDB filename (e.g., `ntkrnlmp.pdb` for ntoskrnl.exe)
+- `-o`: Output JSON file path
+
+This downloads the PDB from Microsoft's symbol server, parses it, and writes the JSON to disk. The resulting file can be used directly with the plugin or for developing test fixtures.
+
+**Use cases**:
+- Creating test fixtures with real PDB data
+- Offline development without symbol server access
+- Debugging PDB parsing issues
+- Examining PDB structure for specific Windows builds
+
 ### Step 3: Parse Symbols
 
 ```python
