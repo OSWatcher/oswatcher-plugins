@@ -310,15 +310,29 @@ def parse_code_view(pe_path):
             return guid, code_view.age & 0xF, code_view.filename
 
 
+def _pdb_progress_callback(percentage, description):
+    """Progress callback for PDB downloads - must be module-level for multiprocessing pickling.
+
+    Args:
+        percentage: Progress percentage (0-100)
+        description: Description of current operation
+    """
+    logging.debug(f"PDB download progress: {percentage: .1f}% - {description}")
+
+
 def retrieve_pdb(guid, age, pdb_name) -> str:
-    filename = PdbRetreiver().retreive_pdb(guid + str(age), file_name=pdb_name, progress_callback=None)
+    logging.debug("Retrieving PDB: %s - GUID: %s - Age: %s", pdb_name, guid, age)
+    filename = PdbRetreiver().retreive_pdb(
+        guid + str(age), file_name=pdb_name, progress_callback=_pdb_progress_callback
+    )
+    logging.debug("filename: %s", filename)
     if not filename:
         raise ValueError("PDB file could not be retrieved from the internet")
     url = urllib_parse.urlparse(filename, scheme="file")
     if url.scheme == "file":
         if not Path(filename).exists():
             logging.error(f"File {filename} does not exists")
-        location = "file:" + urllib_request.pathname2url(Path(filename).absolute())
+        location = "file:" + urllib_request.pathname2url(str(Path(filename).absolute()))
     else:
         location = filename
     return location
@@ -388,6 +402,7 @@ class SymbolsPlugin(AbstractPlugin):
         try:
             location = retrieve_pdb(guid, age, pdb_name)
         except Exception as e:
+            self.logger.error("Failed to retrieve PDB for blob %s: %s", blob_hash, e)
             raise ValueError(f"Failed to retrieve PDB {pdb_name} on {blob_hash}") from e
         logging.debug(location)
         ctx = Context()

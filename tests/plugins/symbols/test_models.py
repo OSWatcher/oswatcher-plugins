@@ -297,7 +297,11 @@ class TestSymbolsMerkleVisitor:
 
     def test_visit_struct_produces_merkle_node(self):
         """Should convert WinStructNode to WinStructMerkleNode."""
-        struct_data = {"kind": "struct", "size": 16, "fields": {"field1": {"offset": 0, "type": {"kind": "base", "name": "int"}}}}
+        struct_data = {
+            "kind": "struct",
+            "size": 16,
+            "fields": {"field1": {"offset": 0, "type": {"kind": "base", "name": "int"}}},
+        }
         struct_node = WinStructNode(name="TestStruct", struct_data=struct_data)
 
         with SymbolsMerkleVisitor(thread=True) as visitor:
