@@ -131,6 +131,10 @@ def test_symbols_plugin_real_pdb(
     plugin = SymbolsPlugin()
     plugin.neogit = simple_neogit_init
 
+    # ensure constraints
+    with plugin.neogit.db.transaction:
+        plugin.ensure_constraints()
+
     with patch.object(plugin, "downloaded_file") as mock_download:
         mock_download.return_value.__enter__.return_value = fake_pe_path
         mock_download.return_value.__exit__.return_value = None
