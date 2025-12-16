@@ -23,7 +23,7 @@ attrs = "^23.2.0"
 dynaconf = "^3.2.5"
 python-magic = "^0.4.27"
 lief = "0.14.0"
-volatility3 = "^2.5.2"
+volatility3 = "^2.26.2"
 regipy = "^4.1.1"
 jsonschema = "^4.21.1"
 pypeln = "^0.4.9"
@@ -31,6 +31,7 @@ pypeln = "^0.4.9"
 # pypeln -> stopit -> pkg_resources (may be missing in some virtual environments)
 # See: https://github.com/glenfant/stopit/issues/32
 setuptools = "*"
+gitpython = "^3.1.0"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -42,7 +43,9 @@ mypy = "1.9.0"
 appdirs-stubs = "^0.1.0"
 types-appdirs = "^1.4.3.1"
 ipdb = "^0.13.13"
-pdbpp = "^0.10.3"
+pdbpp = "^0.11.7"
+pytest = "^8.0.0"
+pytest-cov = "^4.0.0"
 
 [tool.poe.tasks]
 fmt = "black ."
@@ -51,6 +54,10 @@ _isort = "isort ."
 lint = ["_flake8", "_isort"]
 typing = "mypy -p plugins"
 ccode = ["fmt", "lint"]
+test = "pytest tests/ -v"
+test-cov = "pytest tests/ --cov=plugins --cov-report=term"
+test-unit = "pytest tests/ -m 'not integration' -v"
+test-integration = "pytest tests/ -m integration -v"
 
 [tool.black]
 line-length = 120
@@ -75,3 +82,19 @@ show_error_context = true
 show_column_numbers = true
 show_error_codes = true
 pretty = true
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests (may be slow)",
+    "slow: marks tests as slow running tests",
+]
+filterwarnings = [
+    # libcloud AWS datetime warnings
+    "ignore:datetime.datetime.utcnow\\(\\) is deprecated:DeprecationWarning:libcloud",
+    # neo4j driver session warnings
+    "ignore:Relying on Driver's destructor to close the session:DeprecationWarning:neo4j",
+    # neomodel datetime warnings
+    "ignore:datetime.datetime.utcfromtimestamp\\(\\) is deprecated:DeprecationWarning:neomodel",
+    # stopit pkg_resources deprecation (stopit is unmaintained dependency of pypeln)
+    "ignore:pkg_resources is deprecated as an API:UserWarning:stopit",
+]

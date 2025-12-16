@@ -7,7 +7,7 @@ import logging
 import os
 import tempfile
 from binascii import hexlify
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from enum import Enum, auto
 from pathlib import Path, PurePath
 from typing import Dict, Generator, Optional, Tuple
@@ -23,8 +23,9 @@ from neogit.core.visitor import VisitedNode
 from neogit.model.neo import Commit
 from volatility3.framework.contexts import Context
 from volatility3.framework.symbols.windows.pdbconv import PdbReader, PdbRetreiver
-from neogit.service.neogit import cypher_query_with_backoff
 
+from plugins.plugins.symbols_repository import SymbolsRepository
+from plugins.plugins.symbols_service import filter_valid_filenames, parse_symbols_from_json
 from plugins.types import AbstractPlugin, UniqueConstraint
 
 
@@ -68,7 +69,7 @@ class UserTypeKindType(Enum):
 
 
 @define(auto_attribs=True)
-class WinStructNode(Node):
+class StructNode(Node):
     name: str
     struct_data: Dict
     # either struct, union or enum
@@ -86,19 +87,19 @@ class WinStructNode(Node):
     def iter_child_nodes(self) -> Generator[Node, None, None]:
         if self.kind == UserTypeKindType.Enum:
             for name, value in self.struct_data["constants"].items():
-                field_node = WinStructFieldNode(
+                field_node = StructFieldNode(
                     name=name, field_data={"offset": value, "type": {"kind": FieldKindType.Base.name, "name": "int"}}
                 )
                 yield field_node
         else:
             # iterate on every field
             for field_name, field_data in self.struct_data["fields"].items():
-                field_node = WinStructFieldNode(name=field_name, field_data=field_data)
+                field_node = StructFieldNode(name=field_name, field_data=field_data)
                 yield field_node
 
 
 @define(auto_attribs=True)
-class WinStructFieldNode(Node):
+class StructFieldNode(Node):
     name: str = field()
     field_data: Dict = field()
     offset: int = field(init=False)
@@ -111,11 +112,11 @@ class WinStructFieldNode(Node):
     # store data type directly in the field node
     # def iter_child_nodes(self) -> Generator[Node, None, None]:
     #     # construct the subtype node
-    #     yield WinDataTypeNode(data_type=self.field_data["type"])
+    #     yield DataTypeNode(data_type=self.field_data["type"])
 
 
 @define(auto_attribs=True)
-class WinDataTypeNode(Node):
+class DataTypeNode(Node):
     """Represents basic data types
     - name: unsigned long
     - name: unsigned long long
@@ -156,11 +157,11 @@ class WinDataTypeNode(Node):
     def iter_child_nodes(self) -> Generator[Node, None, None]:
         match self.kind:
             case FieldKindType.Array | FieldKindType.Bitfield | FieldKindType.Pointer:
-                yield WinDataTypeNode(data_type=self.subtype)
+                yield DataTypeNode(data_type=self.subtype)
 
 
 @define(auto_attribs=True)
-class WinDataTypeMerkleNode(MerkleNode):
+class DataTypeMerkleNode(MerkleNode):
     kind: FieldKindType = field(kw_only=True)
     name: Optional[str] = field(default=None, kw_only=True)
     array_counter: Optional[int] = field(default=None, kw_only=True)
@@ -169,14 +170,14 @@ class WinDataTypeMerkleNode(MerkleNode):
 
 
 @define(auto_attribs=True)
-class WinStructFieldMerkleNode(MerkleNode):
+class StructFieldMerkleNode(MerkleNode):
     name: str = field(kw_only=True)
     offset: int = field(kw_only=True)
     data_type: str = field(kw_only=True)
 
 
 @define(auto_attribs=True)
-class WinStructMerkleNode(MerkleNode):
+class StructMerkleNode(MerkleNode):
     name: str = field(kw_only=True)
     size: int = field(kw_only=True)
     kind: UserTypeKindType = field(kw_only=True)
@@ -185,7 +186,7 @@ class WinStructMerkleNode(MerkleNode):
 # define the visitor
 class SymbolsMerkleVisitor(MerkleVisitor):
 
-    def visit_WinDataTypeNode(self, node: WinDataTypeNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
+    def visit_DataTypeNode(self, node: DataTypeNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
         match node.kind:
             case (
                 FieldKindType.Base
@@ -195,7 +196,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 | FieldKindType.Function
             ):
                 hash_obj.update(f"{node.name}".encode())
-                merkle_node = WinDataTypeMerkleNode(
+                merkle_node = DataTypeMerkleNode(
                     hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, kind=node.kind, name=node.name
                 )
                 return VisitedNode(node, merkle_node)
@@ -205,7 +206,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 merkle_node = visited_node.return_value
                 data = f"{merkle_node.hash}-{node.array_counter}\n".encode()
                 hash_obj.update(data)
-                merkle_node = WinDataTypeMerkleNode(
+                merkle_node = DataTypeMerkleNode(
                     hash=hash_obj.hexdigest(),
                     label=MerkleLabel.Blob,
                     kind=node.kind,
@@ -219,7 +220,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 merkle_node = visited_node.return_value
                 data = f"{merkle_node.hash}-{node.bit_length}-{node.bit_position}\n".encode()
                 hash_obj.update(data)
-                merkle_node = WinDataTypeMerkleNode(
+                merkle_node = DataTypeMerkleNode(
                     hash=hash_obj.hexdigest(),
                     label=MerkleLabel.Blob,
                     kind=node.kind,
@@ -234,7 +235,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 merkle_node = visited_node.return_value
                 data = f"{merkle_node.hash}\n".encode()
                 hash_obj.update(data)
-                merkle_node = WinDataTypeMerkleNode(
+                merkle_node = DataTypeMerkleNode(
                     hash=hash_obj.hexdigest(),
                     label=MerkleLabel.Blob,
                     kind=node.kind,
@@ -242,9 +243,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 )
                 return VisitedNode(node, merkle_node)
 
-    def visit_WinStructFieldNode(
-        self, node: WinStructFieldNode, hash_obj: hashlib._Hash, *args, **kwargs
-    ) -> VisitedNode:
+    def visit_StructFieldNode(self, node: StructFieldNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
         children = {}
         # for data_type in node.iter_child_nodes():
         #     visited_node = self.visit(data_type)
@@ -254,12 +253,17 @@ class SymbolsMerkleVisitor(MerkleVisitor):
         #     children[merkle_node.hash] = merkle_node
         # merklize the offset and the data type string
         hash_obj.update(f"{node.offset}-{node.data_type}".encode())
-        merkle_node = WinStructFieldMerkleNode(
-            hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, name=node.name, offset=node.offset, data_type=node.data_type, children=children
+        merkle_node = StructFieldMerkleNode(
+            hash=hash_obj.hexdigest(),
+            label=MerkleLabel.Blob,
+            name=node.name,
+            offset=node.offset,
+            data_type=node.data_type,
+            children=children,
         )
         return VisitedNode(node, merkle_node)
 
-    def visit_WinStructNode(self, node: WinStructNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
+    def visit_StructNode(self, node: StructNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
         children = {}
         for member in node.iter_child_nodes():
             visited_node = self.visit(member)
@@ -269,7 +273,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
             hash_obj.update(data)
             children[member.name] = merkle_node
         hash_obj.update(f"{node.size}-{node.kind.name}".encode())
-        merkle_node = WinStructMerkleNode(
+        merkle_node = StructMerkleNode(
             hash=hash_obj.hexdigest(),
             children=children,
             label=MerkleLabel.Tree,
@@ -304,15 +308,29 @@ def parse_code_view(pe_path):
             return guid, code_view.age & 0xF, code_view.filename
 
 
+def _pdb_progress_callback(percentage, description):
+    """Progress callback for PDB downloads - must be module-level for multiprocessing pickling.
+
+    Args:
+        percentage: Progress percentage (0-100)
+        description: Description of current operation
+    """
+    logging.debug(f"PDB download progress: {percentage: .1f}% - {description}")
+
+
 def retrieve_pdb(guid, age, pdb_name) -> str:
-    filename = PdbRetreiver().retreive_pdb(guid + str(age), file_name=pdb_name, progress_callback=None)
+    logging.debug("Retrieving PDB: %s - GUID: %s - Age: %s", pdb_name, guid, age)
+    filename = PdbRetreiver().retreive_pdb(
+        guid + str(age), file_name=pdb_name, progress_callback=_pdb_progress_callback
+    )
+    logging.debug("filename: %s", filename)
     if not filename:
         raise ValueError("PDB file could not be retrieved from the internet")
     url = urllib_parse.urlparse(filename, scheme="file")
     if url.scheme == "file":
         if not Path(filename).exists():
             logging.error(f"File {filename} does not exists")
-        location = "file:" + urllib_request.pathname2url(Path(filename).absolute())
+        location = "file:" + urllib_request.pathname2url(str(Path(filename).absolute()))
     else:
         location = filename
     return location
@@ -321,43 +339,48 @@ def retrieve_pdb(guid, age, pdb_name) -> str:
 @define(auto_attribs=True)
 class SymbolsPlugin(AbstractPlugin):
     max_workers: int = field(init=False, default=os.cpu_count())
+    _repository: SymbolsRepository = field(init=False, default=None)
 
     PE_MIME_TYPE = "application/vnd.microsoft.portable-executable"
     # only process these filenames for now
     FILTER_FILENAME = ["ntoskrnl.exe", "ntdll.dll", "kernel32.dll"]
 
+    @property
+    def repository(self) -> SymbolsRepository:
+        """Lazy-initialize repository."""
+        if self._repository is None:
+            self._repository = SymbolsRepository(self.neogit)
+        return self._repository
+
     def constraints_data(self) -> lief.List[UniqueConstraint]:
         return [
             UniqueConstraint(label="Symbol", property_list=["hash"]),
-            UniqueConstraint(label="WinStruct", property_list=["hash"]),
-            UniqueConstraint(label="WinStructField", property_list=["hash"]),
-            UniqueConstraint(label="WinDataType", property_list=["hash"]),
+            UniqueConstraint(label="Struct", property_list=["hash"]),
+            UniqueConstraint(label="StructField", property_list=["hash"]),
+            UniqueConstraint(label="DataType", property_list=["hash"]),
         ]
 
     def run(self, commit: Commit):
         # identify every PE file Blob
         fs = commit.filesystem.single()
-        query = """
-        MATCH path = (r:Tree {hash: $root_hash})-[:HAS_CHILD_TREE|HAS_CHILD_BLOB*]->(b:Blob)
-        WHERE EXISTS {
-                MATCH (b)-[:HAS_MIME_TYPE]->(m:MimeType)
-                WHERE m.mime = $mime_type
-            }
-        RETURN [rel IN relationships(path) | rel.name] AS parts, b.hash
-        """
-        rows, _ = self.neogit.db.cypher_query(query, {"mime_type": self.__class__.PE_MIME_TYPE, "root_hash": fs.hash})
-        blob_results = ((PurePath(*row[0]), row[1]) for row in rows if PurePath(*row[0]).name in self.FILTER_FILENAME)
+
+        # Use repository to query PE blobs
+        all_blobs = self.repository.query_pe_blobs(fs.hash, self.__class__.PE_MIME_TYPE)
+        blob_results = filter_valid_filenames(all_blobs, self.FILTER_FILENAME)
         stage = pl.process.map(self.stage_parse_code_view, blob_results, workers=4)
         stage = pl.process.map(self.stage_process_pdb, stage, workers=self.max_workers, maxsize=self.max_workers)
         for ret in stage:
             if isinstance(ret, BaseException):
-                # self.logger.error("Failed to handle PDB: %s", ret)
+                self.logger.error("Failed to process PDB: %s: %s", type(ret).__name__, ret)
                 continue
-            blob_hash, pdb_name, tmp_file = ret
-            with temporary_file_context(tmp_file) as tmp_file:
-                with open(tmp_file, "r") as f:
+            blob_hash, pdb_name, tmp_file_path = ret
+            try:
+                with open(tmp_file_path, "r") as f:
                     j_data = json.load(f)
-            self.parse_pdb_json(blob_hash, pdb_name, j_data)
+                self.parse_pdb_json(blob_hash, pdb_name, j_data)
+            finally:
+                with suppress(FileNotFoundError):
+                    os.remove(tmp_file_path)
 
     @return_exceptions
     def stage_parse_code_view(self, blob_result: Tuple[PurePath, str]) -> Optional[Tuple[str, int, str]]:
@@ -377,15 +400,17 @@ class SymbolsPlugin(AbstractPlugin):
         try:
             location = retrieve_pdb(guid, age, pdb_name)
         except Exception as e:
-            raise ValueError("Failed to retrieve PDB %s on %s", pdb_name, blob_hash) from e
+            self.logger.error("Failed to retrieve PDB for blob %s: %s", blob_hash, e)
+            raise ValueError(f"Failed to retrieve PDB {pdb_name} on {blob_hash}") from e
         logging.debug(location)
         ctx = Context()
         try:
             j_data = PdbReader(ctx, location).get_json()
         except Exception as e:
-            raise ValueError("Failed to parse PDB %s on %s", pdb_name, blob_hash) from e
+            raise ValueError(f"Failed to parse PDB {pdb_name} on {blob_hash}") from e
         with tempfile.NamedTemporaryFile(delete=False, mode="w+") as tmp_file:
             json.dump(j_data, tmp_file)
+            tmp_file.flush()
             self.logger.debug("PDB: %s - JSON file: %s", pdb_name, tmp_file.name)
             return blob_hash, pdb_name, Path(tmp_file.name)
 
@@ -402,122 +427,36 @@ class SymbolsPlugin(AbstractPlugin):
         with SymbolsMerkleVisitor(thread=True) as visitor:
             for struct_name, struct_data in sorted(j_pdb.items()):
                 self.logger.debug("Struct: %s", struct_name)
-                struct_node = WinStructNode(name=struct_name, struct_data=struct_data)
+                struct_node = StructNode(name=struct_name, struct_data=struct_data)
                 visitor.run_visit(struct_node)
                 for node in visitor.as_gen():
                     merkle_node = node.return_value
-                    if isinstance(merkle_node, WinDataTypeMerkleNode):
-                        self.insert_windatatype_cypher(merkle_node)
-                    if isinstance(merkle_node, WinStructMerkleNode):
-                        self.insert_struct_cypher(blob_hash, merkle_node)
+                    if isinstance(merkle_node, DataTypeMerkleNode):
+                        self.repository.insert_data_type(merkle_node)
+                    if isinstance(merkle_node, StructMerkleNode):
+                        unwind_param = [
+                            {
+                                "hash": child_node.hash,
+                                "name": child_name,
+                                "offset": child_node.offset,
+                                "data_type": child_node.data_type,
+                            }
+                            for child_name, child_node in merkle_node.children.items()
+                        ]
+                        self.repository.insert_struct(blob_hash, merkle_node, unwind_param)
 
         return len(j_pdb.items())
 
-    def insert_windatatype_cypher(self, node: WinDataTypeMerkleNode):
-        query = """
-        MERGE (d:WinDataType {hash: $hash})  // Ensure 'hash' uniquely identifies 'WinDataType'
-        ON CREATE SET
-            d.type = CASE WHEN $type IS NOT NULL THEN $type END,
-            d.name = CASE WHEN $name IS NOT NULL THEN $name END,
-            d.array_counter = CASE WHEN $array_counter IS NOT NULL THEN $array_counter END,
-            d.bit_position = CASE WHEN $bit_position IS NOT NULL THEN $bit_position END,
-            d.bit_length = CASE WHEN $bit_length IS NOT NULL THEN $bit_length END
-        ON MATCH SET
-            d.type = CASE WHEN $type IS NOT NULL THEN $type END,
-            d.name = CASE WHEN $name IS NOT NULL THEN $name END,
-            d.array_counter = CASE WHEN $array_counter IS NOT NULL THEN $array_counter END,
-            d.bit_position = CASE WHEN $bit_position IS NOT NULL THEN $bit_position END,
-            d.bit_length = CASE WHEN $bit_length IS NOT NULL THEN $bit_length END
-        WITH d
-        UNWIND $children AS child
-        MERGE (c:WinDataType {hash: child.hash})  // Assuming 'hash' is unique for child nodes too
-        ON CREATE SET
-            c.type = CASE WHEN child.type IS NOT NULL THEN child.type END,
-            c.name = CASE WHEN child.name IS NOT NULL THEN child.name END,
-            c.array_counter = CASE WHEN child.array_counter IS NOT NULL THEN child.array_counter END,
-            c.bit_position = CASE WHEN child.bit_position IS NOT NULL THEN child.bit_position END,
-            c.bit_length = CASE WHEN child.bit_length IS NOT NULL THEN child.bit_length END
-        MERGE (d)-[:HAS_DATA_TYPE]->(c)
-        """
-        children = [
-            {
-                "hash": x.hash,
-                "type": x.kind.name,
-                "name": x.name,
-                "array_counter": x.array_counter,
-                "bit_position": x.bit_position,
-                "bit_length": x.bit_length,
-            }
-            for hash, x in node.children.items()
-        ]
-        cypher_query_with_backoff(
-            query,
-            {
-                "hash": node.hash,
-                "type": node.kind.name,
-                "name": node.name,
-                "array_counter": node.array_counter,
-                "bit_position": node.bit_position,
-                "bit_length": node.bit_length,
-                "children": children,
-            },
-        )
-
-    def insert_struct_cypher(self, blob_hash: str, node: WinStructMerkleNode):
-        query = """
-        MERGE (s:WinStruct {hash: $hash, size: $size, kind: $kind})
-        WITH s
-        UNWIND $unwind_param as x
-        MERGE (f:WinStructField {hash: x.hash, offset: x.offset, data_type: x.data_type})
-        MERGE (s)-[:HAS_FIELD {name: x.name}]->(f)
-        WITH s
-        MATCH (b:Blob {hash: $blob_hash})
-        WITH b, s
-        MERGE (b)-[:HAS_STRUCT {name: $name}]->(s)
-        """
-        unwind_param = [
-            {
-                "hash": child_node.hash,
-                "name": child_name,
-                "offset": child_node.offset,
-                "data_type": child_node.data_type,
-            }
-            for child_name, child_node in node.children.items()
-        ]
-        cypher_query_with_backoff(
-            query,
-            {
-                "blob_hash": blob_hash,
-                "unwind_param": unwind_param,
-                "hash": node.hash,
-                "name": node.name,
-                "size": node.size,
-                "kind": node.kind.name,
-            },
-        )
-
     def insert_symbols(self, blob_hash: str, symbols: Dict) -> int:
+        # Parse symbols using pure function
+        parsed_symbols = parse_symbols_from_json(symbols)
+
+        # Convert to param format for Neo4j
         param_list = []
-        for sym, value in sorted(symbols.items()):
-            if sym.startswith("?") or sym.startswith("$"):
-                continue
-            # store addresses as string to avoid the integer being broken into high and low
-            # by Neo4j javascript driver, resulting into GraphQL issues
-            address = str(value["address"])
-            param_list.append(
-                {
-                    "hash": hashlib.sha1(f"{address}".encode()).hexdigest(),
-                    "sym_name": sym,
-                    "address": address,
-                }
-            )
-            self.logger.debug("Symbol %s (%s)", sym, address)
-        query = """
-        MATCH (b:Blob {hash: $blob_hash})
-        WITH b
-        UNWIND $unwind as p
-        MERGE (s:Symbol {hash: p.hash, address: p.address})
-        MERGE (b)-[:HAS_SYMBOL {name: p.sym_name}]->(s)
-        """
-        cypher_query_with_backoff(query, {"blob_hash": blob_hash, "unwind": param_list})
+        for symbol in parsed_symbols:
+            param_list.append({"hash": symbol["hash"], "sym_name": symbol["name"], "address": symbol["address"]})
+            self.logger.debug("Symbol %s (%s)", symbol["name"], symbol["address"])
+
+        # Use repository to insert symbols
+        self.repository.insert_symbols(blob_hash, param_list)
         return len(symbols.items())
