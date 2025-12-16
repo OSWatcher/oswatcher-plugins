@@ -167,14 +167,14 @@ def test_symbols_plugin_real_pdb(
     ), f"Expected to find kernel symbols like {expected_symbols}, found symbols: {list(symbol_names)[:20]}"
 
     # Verify structs were inserted
-    query = "MATCH (s:WinStruct) RETURN count(s) as count"
+    query = "MATCH (s:Struct) RETURN count(s) as count"
     rows, _ = cypher_query_with_backoff(query, {})
     struct_count = rows[0][0] if rows else 0
     assert struct_count > 0, "No structs found in database"
 
     # Check for well-known kernel structs (should exist in real ntkrnlmp.pdb)
     query = """
-    MATCH (b:Blob {hash: $blob_hash})-[r:HAS_STRUCT]->(s:WinStruct)
+    MATCH (b:Blob {hash: $blob_hash})-[r:HAS_STRUCT]->(s:Struct)
     RETURN r.name as struct_name
     """
     rows, _ = cypher_query_with_backoff(query, {"blob_hash": make_hash("ntoskrnl_blob")})

@@ -102,7 +102,7 @@ Verify:
 
 ```cypher
 // List structs found
-MATCH (b:Blob)-[r:HAS_STRUCT]->(s:WinStruct)
+MATCH (b:Blob)-[r:HAS_STRUCT]->(s:Struct)
 RETURN r.name AS struct, s.size
 LIMIT 20
 ```

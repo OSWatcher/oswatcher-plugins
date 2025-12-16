@@ -39,7 +39,7 @@ class Node:
 ```
 
 **Plugin Examples**:
-- `WinStructNode`, `WinStructFieldNode` (symbols.py)
+- `StructNode`, `StructFieldNode` (symbols.py)
 - `WinRegKeyNode`, `WinRegValueNode` (registry.py)
 - `SyscallTableNode`, `SyscallNode` (syscalls.py - to be implemented)
 
@@ -112,9 +112,9 @@ INPUT LAYER: Domain Nodes (tree structure)
 │  ├─ iter_child_nodes() → Iterator[Node]
 │  └─ accept(visitor)
 │
-├─ WinStructNode (symbols)
+├─ StructNode (symbols)
 │  ├─ name, struct_data, size, kind
-│  └─ iter_child_nodes() → WinStructFieldNode[]
+│  └─ iter_child_nodes() → StructFieldNode[]
 │
 ├─ WinRegKeyNode (registry)
 │  ├─ path, key
@@ -131,13 +131,13 @@ TRANSFORMATION LAYER: Merkle Visitor (bottom-up hash computation)
 ├─ MerkleVisitor extends NodeVisitor
 ├─ visit(node) → creates hash_obj, dispatches to visit_SpecificNode()
 │
-├─ visit_WinStructNode(node, hash_obj):
+├─ visit_StructNode(node, hash_obj):
 │  ├─ For each field child:
 │  │  ├─ visited = self.visit(field)             # Recursive call
 │  │  ├─ merkle_field = visited.return_value     # Get MerkleNode
 │  │  └─ hash_obj.update(f"{name}{hash}\n")     # Accumulate
 │  ├─ hash_obj.update(f"{size}-{kind}")          # Add metadata
-│  └─ Return VisitedNode(node, WinStructMerkleNode(hash, Tree, children))
+│  └─ Return VisitedNode(node, StructMerkleNode(hash, Tree, children))
 │
 ├─ visit_WinRegKeyNode(node, hash_obj):
 │  ├─ Sort children (keys first, then values, alphabetically)
@@ -159,10 +159,10 @@ OUTPUT LAYER: Merkle Nodes (content-addressed)
 │  └─ Additional fields (name, size, kind, offset, etc.)
 │
 ├─ Tree nodes: Internal (have children)
-│  └─ Examples: WinStructMerkleNode, WinRegKeyMerkleNode
+│  └─ Examples: StructMerkleNode, WinRegKeyMerkleNode
 │
 └─ Blob nodes: Leaves (no children or terminal)
-   └─ Examples: WinStructFieldMerkleNode, WinRegValueMerkleNode
+   └─ Examples: StructFieldMerkleNode, WinRegValueMerkleNode
 
                         ↓
 
@@ -196,7 +196,7 @@ with self.downloaded_file(blob_hash) as local_file:
 ```python
 # symbols.py:156-169
 @define(auto_attribs=True)
-class WinStructNode(Node):
+class StructNode(Node):
     name: str
     struct_data: Dict
     kind: UserTypeKindType = field(init=False)
@@ -207,9 +207,9 @@ class WinStructNode(Node):
         self.size = self.struct_data["size"]
 
     def iter_child_nodes(self) -> Generator[Node, None, None]:
-        """Yield WinStructFieldNode for each field."""
+        """Yield StructFieldNode for each field."""
         for field_name, field_data in self.struct_data.get("fields", {}).items():
-            yield WinStructFieldNode(name=field_name, field_data=field_data)
+            yield StructFieldNode(name=field_name, field_data=field_data)
 ```
 
 ### Step 3: Visit with MerkleVisitor
@@ -218,7 +218,7 @@ class WinStructNode(Node):
 # symbols.py:361-363
 with SymbolsMerkleVisitor(thread=True) as visitor:
     for struct_name, struct_data in sorted(j_pdb["user_types"].items()):
-        struct_node = WinStructNode(name=struct_name, struct_data=struct_data)
+        struct_node = StructNode(name=struct_name, struct_data=struct_data)
         visitor.run_visit(struct_node)
 ```
 
@@ -226,7 +226,7 @@ with SymbolsMerkleVisitor(thread=True) as visitor:
 
 ```python
 # symbols.py:228-251
-def visit_WinStructNode(self, node: WinStructNode, hash_obj: hashlib._Hash):
+def visit_StructNode(self, node: StructNode, hash_obj: hashlib._Hash):
     children = {}
 
     # Visit all field children
@@ -244,7 +244,7 @@ def visit_WinStructNode(self, node: WinStructNode, hash_obj: hashlib._Hash):
     hash_obj.update(f"{node.size}-{node.kind.name}".encode())
 
     # Create MerkleNode with computed hash
-    merkle_node = WinStructMerkleNode(
+    merkle_node = StructMerkleNode(
         hash=hash_obj.hexdigest(),      # Final hash: fields + metadata
         children=children,               # Dict of field MerkleNodes
         label=MerkleLabel.Tree,          # Internal node (has children)
@@ -270,11 +270,11 @@ hash = SHA1(
 
 ```python
 # symbols.py:471-502
-def insert_struct_cypher(self, blob_hash: str, node: WinStructMerkleNode):
+def insert_struct_cypher(self, blob_hash: str, node: StructMerkleNode):
     # Collect all fields for UNWIND batch operation
     unwind_param = []
     for field_name, field_node in node.children.items():
-        if isinstance(field_node, WinStructFieldMerkleNode):
+        if isinstance(field_node, StructFieldMerkleNode):
             unwind_param.append({
                 "name": field_name,
                 "hash": field_node.hash,
@@ -283,10 +283,10 @@ def insert_struct_cypher(self, blob_hash: str, node: WinStructMerkleNode):
             })
 
     query = """
-    MERGE (s:WinStruct {hash: $hash, size: $size, kind: $kind})
+    MERGE (s:Struct {hash: $hash, size: $size, kind: $kind})
     WITH s
     UNWIND $unwind_param as x
-    MERGE (f:WinStructField {hash: x.hash, offset: x.offset, data_type: x.data_type})
+    MERGE (f:StructField {hash: x.hash, offset: x.offset, data_type: x.data_type})
     MERGE (s)-[:HAS_FIELD {name: x.name}]->(f)
     WITH s
     MATCH (b:Blob {hash: $blob_hash})
@@ -308,11 +308,11 @@ def insert_struct_cypher(self, blob_hash: str, node: WinStructMerkleNode):
 ```
 (ntoskrnl.exe:Blob)
     -[:HAS_STRUCT {name: "_EPROCESS"}]->
-(struct:WinStruct {hash: "abc123...", size: 1024, kind: "struct"})
+(struct:Struct {hash: "abc123...", size: 1024, kind: "struct"})
     -[:HAS_FIELD {name: "UniqueProcessId"}]->
-(field1:WinStructField {hash: "def456...", offset: 0x440, data_type: "void *"})
+(field1:StructField {hash: "def456...", offset: 0x440, data_type: "void *"})
     -[:HAS_FIELD {name: "ImageFileName"}]->
-(field2:WinStructField {hash: "ghi789...", offset: 0x5A8, data_type: "char[15]"})
+(field2:StructField {hash: "ghi789...", offset: 0x5A8, data_type: "char[15]"})
 ```
 
 ## Data Flow Example: Registry Plugin
@@ -446,7 +446,7 @@ Key (Tree):      hash("Version" + hashA + "Build" + hashB + "Policies" + hashC) 
 - Represent atomic data (values, fields, etc.)
 
 **Examples**:
-- `WinStructFieldMerkleNode` - Struct field with offset/type
+- `StructFieldMerkleNode` - Struct field with offset/type
 - `WinRegValueMerkleNode` - Registry value with data
 - `SyscallMerkleNode` - Individual syscall entry (future)
 
@@ -460,7 +460,7 @@ Key (Tree):      hash("Version" + hashA + "Build" + hashB + "Policies" + hashC) 
 - Hash includes all descendant hashes
 
 **Examples**:
-- `WinStructMerkleNode` - Struct containing fields
+- `StructMerkleNode` - Struct containing fields
 - `WinRegKeyMerkleNode` - Registry key containing subkeys/values
 - `SyscallTableMerkleNode` - Table containing syscalls (future)
 
@@ -529,8 +529,8 @@ SET n.prop1 = item.prop1, n.prop2 = item.prop2
 Example: If two binaries contain identical structs (e.g., `_LIST_ENTRY`), they share the same `WinStruct` node in Neo4j.
 
 ```cypher
-(kernel32.dll:Blob)-[:HAS_STRUCT {name: "_LIST_ENTRY"}]->(struct:WinStruct {hash: "abc123"})
-(ntdll.dll:Blob)-[:HAS_STRUCT {name: "_LIST_ENTRY"}]->(struct:WinStruct {hash: "abc123"})
+(kernel32.dll:Blob)-[:HAS_STRUCT {name: "_LIST_ENTRY"}]->(struct:Struct {hash: "abc123"})
+(ntdll.dll:Blob)-[:HAS_STRUCT {name: "_LIST_ENTRY"}]->(struct:Struct {hash: "abc123"})
                                                              ↑
                                                         Same node!
 ```
@@ -789,11 +789,11 @@ def run(self, commit: Commit):
 
 ## Code Examples
 
-### Example 1: WinStructNode with iter_child_nodes()
+### Example 1: StructNode with iter_child_nodes()
 
 ```python
 @define(auto_attribs=True)
-class WinStructNode(Node):
+class StructNode(Node):
     name: str
     struct_data: Dict
     kind: UserTypeKindType = field(init=False)
@@ -804,15 +804,15 @@ class WinStructNode(Node):
         self.size = self.struct_data["size"]
 
     def iter_child_nodes(self) -> Generator[Node, None, None]:
-        """Yield WinStructFieldNode for each struct field."""
+        """Yield StructFieldNode for each struct field."""
         for field_name, field_data in self.struct_data.get("fields", {}).items():
-            yield WinStructFieldNode(name=field_name, field_data=field_data)
+            yield StructFieldNode(name=field_name, field_data=field_data)
 ```
 
-### Example 2: visit_WinStructNode() Hash Computation
+### Example 2: visit_StructNode() Hash Computation
 
 ```python
-def visit_WinStructNode(self, node: WinStructNode, hash_obj: hashlib._Hash):
+def visit_StructNode(self, node: StructNode, hash_obj: hashlib._Hash):
     children = {}
 
     # Bottom-up: visit all children first
@@ -830,7 +830,7 @@ def visit_WinStructNode(self, node: WinStructNode, hash_obj: hashlib._Hash):
     hash_obj.update(f"{node.size}-{node.kind.name}".encode())
 
     # Create MerkleNode with final hash
-    merkle_node = WinStructMerkleNode(
+    merkle_node = StructMerkleNode(
         hash=hash_obj.hexdigest(),      # SHA1 of: all fields + size + kind
         children=children,               # Dict[str, MerkleNode]
         label=MerkleLabel.Tree,          # Internal node
@@ -845,7 +845,7 @@ def visit_WinStructNode(self, node: WinStructNode, hash_obj: hashlib._Hash):
 
 ```python
 query = """
-MERGE (s:WinStruct {hash: $hash})
+MERGE (s:Struct {hash: $hash})
 ON CREATE SET
     s.size = $size,
     s.kind = $kind
@@ -854,7 +854,7 @@ ON MATCH SET
     s.kind = $kind
 WITH s
 UNWIND $fields AS f
-MERGE (field:WinStructField {hash: f.hash})
+MERGE (field:StructField {hash: f.hash})
 ON CREATE SET
     field.offset = f.offset,
     field.data_type = f.data_type

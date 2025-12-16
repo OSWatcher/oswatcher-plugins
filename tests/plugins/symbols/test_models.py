@@ -3,22 +3,22 @@
 import json
 
 from plugins.plugins.symbols import (
+    DataTypeNode,
     FieldKindType,
+    StructFieldNode,
+    StructNode,
     SymbolsMerkleVisitor,
     UserTypeKindType,
-    WinDataTypeNode,
-    WinStructFieldNode,
-    WinStructNode,
 )
 
 
-class TestWinStructNode:
-    """Tests for WinStructNode class."""
+class TestStructNode:
+    """Tests for StructNode class."""
 
     def test_struct_kind_detection(self):
         """Should detect struct kind from data."""
         data = {"kind": "struct", "size": 64, "fields": {}}
-        node = WinStructNode(name="TestStruct", struct_data=data)
+        node = StructNode(name="TestStruct", struct_data=data)
 
         assert node.kind == UserTypeKindType.Struct
         assert node.size == 64
@@ -26,7 +26,7 @@ class TestWinStructNode:
     def test_union_kind_detection(self):
         """Should detect union kind from data."""
         data = {"kind": "union", "size": 32, "fields": {}}
-        node = WinStructNode(name="TestUnion", struct_data=data)
+        node = StructNode(name="TestUnion", struct_data=data)
 
         assert node.kind == UserTypeKindType.Union
         assert node.size == 32
@@ -34,7 +34,7 @@ class TestWinStructNode:
     def test_enum_detection_by_constants(self):
         """Should detect enum when constants field present."""
         data = {"size": 4, "constants": {"A": 0, "B": 1}}
-        node = WinStructNode(name="TestEnum", struct_data=data)
+        node = StructNode(name="TestEnum", struct_data=data)
 
         assert node.kind == UserTypeKindType.Enum
         assert node.size == 4
@@ -49,30 +49,30 @@ class TestWinStructNode:
                 "field2": {"offset": 8, "type": {"kind": "base", "name": "long"}},
             },
         }
-        node = WinStructNode(name="Test", struct_data=data)
+        node = StructNode(name="Test", struct_data=data)
 
         fields = list(node.iter_child_nodes())
 
         assert len(fields) == 2
-        assert all(isinstance(f, WinStructFieldNode) for f in fields)
+        assert all(isinstance(f, StructFieldNode) for f in fields)
         field_names = [f.name for f in fields]
         assert "field1" in field_names
         assert "field2" in field_names
 
     def test_iter_enum_yields_fields_for_constants(self):
-        """Should yield WinStructFieldNode for each enum constant."""
+        """Should yield StructFieldNode for each enum constant."""
         data = {"size": 4, "constants": {"A": 0, "B": 1, "C": 2}}
-        node = WinStructNode(name="TestEnum", struct_data=data)
+        node = StructNode(name="TestEnum", struct_data=data)
 
         fields = list(node.iter_child_nodes())
 
         assert len(fields) == 3
-        assert all(isinstance(f, WinStructFieldNode) for f in fields)
+        assert all(isinstance(f, StructFieldNode) for f in fields)
 
     def test_enum_constant_as_offset(self):
         """Enum constants should be stored as field offset."""
         data = {"size": 4, "constants": {"MY_CONSTANT": 42}}
-        node = WinStructNode(name="TestEnum", struct_data=data)
+        node = StructNode(name="TestEnum", struct_data=data)
 
         fields = list(node.iter_child_nodes())
 
@@ -82,7 +82,7 @@ class TestWinStructNode:
     def test_empty_struct(self):
         """Should handle struct with no fields."""
         data = {"kind": "struct", "size": 0, "fields": {}}
-        node = WinStructNode(name="EmptyStruct", struct_data=data)
+        node = StructNode(name="EmptyStruct", struct_data=data)
 
         fields = list(node.iter_child_nodes())
 
@@ -90,21 +90,19 @@ class TestWinStructNode:
         assert node.size == 0
 
 
-class TestWinStructFieldNode:
-    """Tests for WinStructFieldNode class."""
+class TestStructFieldNode:
+    """Tests for StructFieldNode class."""
 
     def test_offset_extraction(self):
         """Should extract offset from field data."""
-        field = WinStructFieldNode(
-            name="test_field", field_data={"offset": 128, "type": {"kind": "base", "name": "int"}}
-        )
+        field = StructFieldNode(name="test_field", field_data={"offset": 128, "type": {"kind": "base", "name": "int"}})
 
         assert field.offset == 128
 
     def test_data_type_is_json_string(self):
         """Should encode type data as JSON string."""
         type_data = {"kind": "pointer", "subtype": {"kind": "base", "name": "void"}}
-        field = WinStructFieldNode(name="ptr_field", field_data={"offset": 0, "type": type_data})
+        field = StructFieldNode(name="ptr_field", field_data={"offset": 0, "type": type_data})
 
         assert field.data_type == json.dumps(type_data)
         # Verify it's valid JSON
@@ -117,7 +115,7 @@ class TestWinStructFieldNode:
             "count": 10,
             "subtype": {"kind": "pointer", "subtype": {"kind": "struct", "name": "_EPROCESS"}},
         }
-        field = WinStructFieldNode(name="array_field", field_data={"offset": 64, "type": type_data})
+        field = StructFieldNode(name="array_field", field_data={"offset": 64, "type": type_data})
 
         # Should be able to store any JSON-serializable type
         assert isinstance(field.data_type, str)
@@ -126,9 +124,7 @@ class TestWinStructFieldNode:
 
     def test_field_name_preservation(self):
         """Should preserve field name."""
-        field = WinStructFieldNode(
-            name="MyFieldName", field_data={"offset": 0, "type": {"kind": "base", "name": "int"}}
-        )
+        field = StructFieldNode(name="MyFieldName", field_data={"offset": 0, "type": {"kind": "base", "name": "int"}})
 
         assert field.name == "MyFieldName"
 
@@ -155,13 +151,13 @@ class TestUserTypeKindType:
             assert hasattr(UserTypeKindType, kind)
 
 
-class TestWinDataTypeNode:
-    """Tests for WinDataTypeNode class."""
+class TestDataTypeNode:
+    """Tests for DataTypeNode class."""
 
     def test_base_type_no_children(self):
         """Base types should have no children."""
         type_data = {"kind": "base", "name": "int"}
-        node = WinDataTypeNode(data_type=type_data)
+        node = DataTypeNode(data_type=type_data)
 
         children = list(node.iter_child_nodes())
 
@@ -171,31 +167,31 @@ class TestWinDataTypeNode:
     def test_pointer_type_has_one_child(self):
         """Pointer types should yield one child (the subtype)."""
         type_data = {"kind": "pointer", "subtype": {"kind": "base", "name": "void"}}
-        node = WinDataTypeNode(data_type=type_data)
+        node = DataTypeNode(data_type=type_data)
 
         children = list(node.iter_child_nodes())
 
         assert len(children) == 1
-        assert isinstance(children[0], WinDataTypeNode)
+        assert isinstance(children[0], DataTypeNode)
         assert children[0].kind == FieldKindType.Base
         assert node.kind == FieldKindType.Pointer
 
     def test_array_type_has_one_child(self):
         """Array types should yield one child (the element type)."""
         type_data = {"kind": "array", "count": 10, "subtype": {"kind": "base", "name": "char"}}
-        node = WinDataTypeNode(data_type=type_data)
+        node = DataTypeNode(data_type=type_data)
 
         children = list(node.iter_child_nodes())
 
         assert len(children) == 1
-        assert isinstance(children[0], WinDataTypeNode)
+        assert isinstance(children[0], DataTypeNode)
         assert children[0].kind == FieldKindType.Base
         assert node.kind == FieldKindType.Array
 
     def test_struct_type_no_children(self):
         """Struct type references should have no children (just a name reference)."""
         type_data = {"kind": "struct", "name": "_EPROCESS"}
-        node = WinDataTypeNode(data_type=type_data)
+        node = DataTypeNode(data_type=type_data)
 
         children = list(node.iter_child_nodes())
 
@@ -208,7 +204,7 @@ class TestWinDataTypeNode:
             "kind": "pointer",
             "subtype": {"kind": "array", "count": 5, "subtype": {"kind": "base", "name": "int"}},
         }
-        node = WinDataTypeNode(data_type=type_data)
+        node = DataTypeNode(data_type=type_data)
 
         # First level: pointer yields array child
         children_level1 = list(node.iter_child_nodes())
@@ -226,7 +222,7 @@ class TestWinDataTypeNode:
             "kind": "pointer",
             "subtype": {"kind": "pointer", "subtype": {"kind": "struct", "name": "_LIST_ENTRY"}},
         }
-        node = WinDataTypeNode(data_type=type_data)
+        node = DataTypeNode(data_type=type_data)
 
         # Level 1: outer pointer
         children_level1 = list(node.iter_child_nodes())
@@ -245,7 +241,7 @@ class TestWinDataTypeNode:
     def test_union_type_no_children(self):
         """Union type references should have no children."""
         type_data = {"kind": "union", "name": "_LARGE_INTEGER"}
-        node = WinDataTypeNode(data_type=type_data)
+        node = DataTypeNode(data_type=type_data)
 
         children = list(node.iter_child_nodes())
 
@@ -255,7 +251,7 @@ class TestWinDataTypeNode:
     def test_enum_type_no_children(self):
         """Enum type references should have no children."""
         type_data = {"kind": "enum", "name": "FILE_SHARE_MODE"}
-        node = WinDataTypeNode(data_type=type_data)
+        node = DataTypeNode(data_type=type_data)
 
         children = list(node.iter_child_nodes())
 
@@ -265,7 +261,7 @@ class TestWinDataTypeNode:
     def test_bitfield_type_has_child(self):
         """Bitfield types should have one child (the wrapped type)."""
         type_data = {"kind": "bitfield", "bit_length": 1, "bit_position": 0, "type": {"kind": "base", "name": "int"}}
-        node = WinDataTypeNode(data_type=type_data)
+        node = DataTypeNode(data_type=type_data)
 
         children = list(node.iter_child_nodes())
 
@@ -277,7 +273,7 @@ class TestWinDataTypeNode:
     def test_function_type_no_children(self):
         """Function types should have no children."""
         type_data = {"kind": "function"}
-        node = WinDataTypeNode(data_type=type_data)
+        node = DataTypeNode(data_type=type_data)
 
         children = list(node.iter_child_nodes())
 
@@ -287,7 +283,7 @@ class TestWinDataTypeNode:
     def test_data_type_preservation(self):
         """Should preserve original type data."""
         type_data = {"kind": "pointer", "subtype": {"kind": "base", "name": "char"}}
-        node = WinDataTypeNode(data_type=type_data)
+        node = DataTypeNode(data_type=type_data)
 
         assert node.data_type == type_data
 
@@ -296,13 +292,13 @@ class TestSymbolsMerkleVisitor:
     """Tests for SymbolsMerkleVisitor hash computation."""
 
     def test_visit_struct_produces_merkle_node(self):
-        """Should convert WinStructNode to WinStructMerkleNode."""
+        """Should convert StructNode to StructMerkleNode."""
         struct_data = {
             "kind": "struct",
             "size": 16,
             "fields": {"field1": {"offset": 0, "type": {"kind": "base", "name": "int"}}},
         }
-        struct_node = WinStructNode(name="TestStruct", struct_data=struct_data)
+        struct_node = StructNode(name="TestStruct", struct_data=struct_data)
 
         with SymbolsMerkleVisitor(thread=True) as visitor:
             visitor.run_visit(struct_node)
@@ -320,8 +316,8 @@ class TestSymbolsMerkleVisitor:
     def test_visit_struct_hash_deterministic(self):
         """Same struct should produce same hash."""
         struct_data = {"kind": "struct", "size": 32, "fields": {}}
-        struct_node_1 = WinStructNode(name="Test", struct_data=struct_data)
-        struct_node_2 = WinStructNode(name="Test", struct_data=struct_data)
+        struct_node_1 = StructNode(name="Test", struct_data=struct_data)
+        struct_node_2 = StructNode(name="Test", struct_data=struct_data)
 
         with SymbolsMerkleVisitor(thread=True) as visitor:
             visitor.run_visit(struct_node_1)
@@ -339,8 +335,8 @@ class TestSymbolsMerkleVisitor:
         """Different struct sizes should produce different hashes."""
         struct_data_1 = {"kind": "struct", "size": 16, "fields": {}}
         struct_data_2 = {"kind": "struct", "size": 32, "fields": {}}
-        struct_node_1 = WinStructNode(name="Test", struct_data=struct_data_1)
-        struct_node_2 = WinStructNode(name="Test", struct_data=struct_data_2)
+        struct_node_1 = StructNode(name="Test", struct_data=struct_data_1)
+        struct_node_2 = StructNode(name="Test", struct_data=struct_data_2)
 
         with SymbolsMerkleVisitor(thread=True) as visitor:
             visitor.run_visit(struct_node_1)
@@ -364,7 +360,7 @@ class TestSymbolsMerkleVisitor:
                 "field2": {"offset": 8, "type": {"kind": "base", "name": "long"}},
             },
         }
-        struct_node = WinStructNode(name="TestStruct", struct_data=struct_data)
+        struct_node = StructNode(name="TestStruct", struct_data=struct_data)
 
         with SymbolsMerkleVisitor(thread=True) as visitor:
             visitor.run_visit(struct_node)
@@ -378,7 +374,7 @@ class TestSymbolsMerkleVisitor:
     def test_visit_enum_detected_correctly(self):
         """Enum should be detected and labeled correctly."""
         enum_data = {"size": 4, "constants": {"A": 0, "B": 1, "C": 2}}
-        enum_node = WinStructNode(name="TestEnum", struct_data=enum_data)
+        enum_node = StructNode(name="TestEnum", struct_data=enum_data)
 
         with SymbolsMerkleVisitor(thread=True) as visitor:
             visitor.run_visit(enum_node)
@@ -398,7 +394,7 @@ class TestSymbolsMerkleVisitor:
                 "AsPointer": {"offset": 0, "type": {"kind": "pointer", "subtype": {"kind": "base", "name": "void"}}},
             },
         }
-        union_node = WinStructNode(name="TestUnion", struct_data=union_data)
+        union_node = StructNode(name="TestUnion", struct_data=union_data)
 
         with SymbolsMerkleVisitor(thread=True) as visitor:
             visitor.run_visit(union_node)
@@ -408,9 +404,9 @@ class TestSymbolsMerkleVisitor:
         assert merkle_node.kind.name == "Union"
 
     def test_visit_data_type_base_produces_merkle_node(self):
-        """Base type should produce WinDataTypeMerkleNode."""
+        """Base type should produce DataTypeMerkleNode."""
         type_data = {"kind": "base", "name": "int"}
-        type_node = WinDataTypeNode(data_type=type_data)
+        type_node = DataTypeNode(data_type=type_data)
 
         with SymbolsMerkleVisitor(thread=True) as visitor:
             visitor.run_visit(type_node)
@@ -425,7 +421,7 @@ class TestSymbolsMerkleVisitor:
     def test_visit_data_type_pointer_has_child(self):
         """Pointer type should have child merkle node."""
         type_data = {"kind": "pointer", "subtype": {"kind": "base", "name": "void"}}
-        type_node = WinDataTypeNode(data_type=type_data)
+        type_node = DataTypeNode(data_type=type_data)
 
         with SymbolsMerkleVisitor(thread=True) as visitor:
             visitor.run_visit(type_node)
@@ -443,7 +439,7 @@ class TestSymbolsMerkleVisitor:
             "kind": "pointer",
             "subtype": {"kind": "array", "count": 10, "subtype": {"kind": "struct", "name": "_EPROCESS"}},
         }
-        type_node = WinDataTypeNode(data_type=type_data)
+        type_node = DataTypeNode(data_type=type_data)
 
         with SymbolsMerkleVisitor(thread=True) as visitor:
             visitor.run_visit(type_node)
@@ -456,9 +452,9 @@ class TestSymbolsMerkleVisitor:
         assert results[2].return_value.kind.name == "Pointer"
 
     def test_visit_field_produces_merkle_node(self):
-        """Field should produce WinStructFieldMerkleNode."""
+        """Field should produce StructFieldMerkleNode."""
         field_data = {"offset": 64, "type": {"kind": "base", "name": "int"}}
-        field_node = WinStructFieldNode(name="test_field", field_data=field_data)
+        field_node = StructFieldNode(name="test_field", field_data=field_data)
 
         with SymbolsMerkleVisitor(thread=True) as visitor:
             visitor.run_visit(field_node)
@@ -476,8 +472,8 @@ class TestSymbolsMerkleVisitor:
         field_data_1 = {"offset": 0, "type": {"kind": "base", "name": "int"}}
         field_data_2 = {"offset": 0, "type": {"kind": "base", "name": "long"}}
 
-        field_node_1 = WinStructFieldNode(name="field", field_data=field_data_1)
-        field_node_2 = WinStructFieldNode(name="field", field_data=field_data_2)
+        field_node_1 = StructFieldNode(name="field", field_data=field_data_1)
+        field_node_2 = StructFieldNode(name="field", field_data=field_data_2)
 
         with SymbolsMerkleVisitor(thread=True) as visitor:
             visitor.run_visit(field_node_1)
@@ -495,8 +491,8 @@ class TestSymbolsMerkleVisitor:
     def test_hash_includes_all_properties(self):
         """Hash should change when any property changes."""
         # Same struct, different sizes
-        struct_1 = WinStructNode(name="Test", struct_data={"kind": "struct", "size": 16, "fields": {}})
-        struct_2 = WinStructNode(name="Test", struct_data={"kind": "struct", "size": 32, "fields": {}})
+        struct_1 = StructNode(name="Test", struct_data={"kind": "struct", "size": 16, "fields": {}})
+        struct_2 = StructNode(name="Test", struct_data={"kind": "struct", "size": 32, "fields": {}})
 
         with SymbolsMerkleVisitor(thread=True) as visitor:
             visitor.run_visit(struct_1)

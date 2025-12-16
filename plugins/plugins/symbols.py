@@ -69,7 +69,7 @@ class UserTypeKindType(Enum):
 
 
 @define(auto_attribs=True)
-class WinStructNode(Node):
+class StructNode(Node):
     name: str
     struct_data: Dict
     # either struct, union or enum
@@ -87,19 +87,19 @@ class WinStructNode(Node):
     def iter_child_nodes(self) -> Generator[Node, None, None]:
         if self.kind == UserTypeKindType.Enum:
             for name, value in self.struct_data["constants"].items():
-                field_node = WinStructFieldNode(
+                field_node = StructFieldNode(
                     name=name, field_data={"offset": value, "type": {"kind": FieldKindType.Base.name, "name": "int"}}
                 )
                 yield field_node
         else:
             # iterate on every field
             for field_name, field_data in self.struct_data["fields"].items():
-                field_node = WinStructFieldNode(name=field_name, field_data=field_data)
+                field_node = StructFieldNode(name=field_name, field_data=field_data)
                 yield field_node
 
 
 @define(auto_attribs=True)
-class WinStructFieldNode(Node):
+class StructFieldNode(Node):
     name: str = field()
     field_data: Dict = field()
     offset: int = field(init=False)
@@ -112,11 +112,11 @@ class WinStructFieldNode(Node):
     # store data type directly in the field node
     # def iter_child_nodes(self) -> Generator[Node, None, None]:
     #     # construct the subtype node
-    #     yield WinDataTypeNode(data_type=self.field_data["type"])
+    #     yield DataTypeNode(data_type=self.field_data["type"])
 
 
 @define(auto_attribs=True)
-class WinDataTypeNode(Node):
+class DataTypeNode(Node):
     """Represents basic data types
     - name: unsigned long
     - name: unsigned long long
@@ -157,11 +157,11 @@ class WinDataTypeNode(Node):
     def iter_child_nodes(self) -> Generator[Node, None, None]:
         match self.kind:
             case FieldKindType.Array | FieldKindType.Bitfield | FieldKindType.Pointer:
-                yield WinDataTypeNode(data_type=self.subtype)
+                yield DataTypeNode(data_type=self.subtype)
 
 
 @define(auto_attribs=True)
-class WinDataTypeMerkleNode(MerkleNode):
+class DataTypeMerkleNode(MerkleNode):
     kind: FieldKindType = field(kw_only=True)
     name: Optional[str] = field(default=None, kw_only=True)
     array_counter: Optional[int] = field(default=None, kw_only=True)
@@ -170,14 +170,14 @@ class WinDataTypeMerkleNode(MerkleNode):
 
 
 @define(auto_attribs=True)
-class WinStructFieldMerkleNode(MerkleNode):
+class StructFieldMerkleNode(MerkleNode):
     name: str = field(kw_only=True)
     offset: int = field(kw_only=True)
     data_type: str = field(kw_only=True)
 
 
 @define(auto_attribs=True)
-class WinStructMerkleNode(MerkleNode):
+class StructMerkleNode(MerkleNode):
     name: str = field(kw_only=True)
     size: int = field(kw_only=True)
     kind: UserTypeKindType = field(kw_only=True)
@@ -186,7 +186,7 @@ class WinStructMerkleNode(MerkleNode):
 # define the visitor
 class SymbolsMerkleVisitor(MerkleVisitor):
 
-    def visit_WinDataTypeNode(self, node: WinDataTypeNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
+    def visit_DataTypeNode(self, node: DataTypeNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
         match node.kind:
             case (
                 FieldKindType.Base
@@ -196,7 +196,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 | FieldKindType.Function
             ):
                 hash_obj.update(f"{node.name}".encode())
-                merkle_node = WinDataTypeMerkleNode(
+                merkle_node = DataTypeMerkleNode(
                     hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, kind=node.kind, name=node.name
                 )
                 return VisitedNode(node, merkle_node)
@@ -206,7 +206,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 merkle_node = visited_node.return_value
                 data = f"{merkle_node.hash}-{node.array_counter}\n".encode()
                 hash_obj.update(data)
-                merkle_node = WinDataTypeMerkleNode(
+                merkle_node = DataTypeMerkleNode(
                     hash=hash_obj.hexdigest(),
                     label=MerkleLabel.Blob,
                     kind=node.kind,
@@ -220,7 +220,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 merkle_node = visited_node.return_value
                 data = f"{merkle_node.hash}-{node.bit_length}-{node.bit_position}\n".encode()
                 hash_obj.update(data)
-                merkle_node = WinDataTypeMerkleNode(
+                merkle_node = DataTypeMerkleNode(
                     hash=hash_obj.hexdigest(),
                     label=MerkleLabel.Blob,
                     kind=node.kind,
@@ -235,7 +235,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 merkle_node = visited_node.return_value
                 data = f"{merkle_node.hash}\n".encode()
                 hash_obj.update(data)
-                merkle_node = WinDataTypeMerkleNode(
+                merkle_node = DataTypeMerkleNode(
                     hash=hash_obj.hexdigest(),
                     label=MerkleLabel.Blob,
                     kind=node.kind,
@@ -243,9 +243,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 )
                 return VisitedNode(node, merkle_node)
 
-    def visit_WinStructFieldNode(
-        self, node: WinStructFieldNode, hash_obj: hashlib._Hash, *args, **kwargs
-    ) -> VisitedNode:
+    def visit_StructFieldNode(self, node: StructFieldNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
         children = {}
         # for data_type in node.iter_child_nodes():
         #     visited_node = self.visit(data_type)
@@ -255,7 +253,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
         #     children[merkle_node.hash] = merkle_node
         # merklize the offset and the data type string
         hash_obj.update(f"{node.offset}-{node.data_type}".encode())
-        merkle_node = WinStructFieldMerkleNode(
+        merkle_node = StructFieldMerkleNode(
             hash=hash_obj.hexdigest(),
             label=MerkleLabel.Blob,
             name=node.name,
@@ -265,7 +263,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
         )
         return VisitedNode(node, merkle_node)
 
-    def visit_WinStructNode(self, node: WinStructNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
+    def visit_StructNode(self, node: StructNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
         children = {}
         for member in node.iter_child_nodes():
             visited_node = self.visit(member)
@@ -275,7 +273,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
             hash_obj.update(data)
             children[member.name] = merkle_node
         hash_obj.update(f"{node.size}-{node.kind.name}".encode())
-        merkle_node = WinStructMerkleNode(
+        merkle_node = StructMerkleNode(
             hash=hash_obj.hexdigest(),
             children=children,
             label=MerkleLabel.Tree,
@@ -357,9 +355,9 @@ class SymbolsPlugin(AbstractPlugin):
     def constraints_data(self) -> lief.List[UniqueConstraint]:
         return [
             UniqueConstraint(label="Symbol", property_list=["hash"]),
-            UniqueConstraint(label="WinStruct", property_list=["hash"]),
-            UniqueConstraint(label="WinStructField", property_list=["hash"]),
-            UniqueConstraint(label="WinDataType", property_list=["hash"]),
+            UniqueConstraint(label="Struct", property_list=["hash"]),
+            UniqueConstraint(label="StructField", property_list=["hash"]),
+            UniqueConstraint(label="DataType", property_list=["hash"]),
         ]
 
     def run(self, commit: Commit):
@@ -429,13 +427,13 @@ class SymbolsPlugin(AbstractPlugin):
         with SymbolsMerkleVisitor(thread=True) as visitor:
             for struct_name, struct_data in sorted(j_pdb.items()):
                 self.logger.debug("Struct: %s", struct_name)
-                struct_node = WinStructNode(name=struct_name, struct_data=struct_data)
+                struct_node = StructNode(name=struct_name, struct_data=struct_data)
                 visitor.run_visit(struct_node)
                 for node in visitor.as_gen():
                     merkle_node = node.return_value
-                    if isinstance(merkle_node, WinDataTypeMerkleNode):
+                    if isinstance(merkle_node, DataTypeMerkleNode):
                         self.repository.insert_data_type(merkle_node)
-                    if isinstance(merkle_node, WinStructMerkleNode):
+                    if isinstance(merkle_node, StructMerkleNode):
                         unwind_param = [
                             {
                                 "hash": child_node.hash,

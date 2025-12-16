@@ -172,7 +172,7 @@ RETURN r.name AS symbol_name, s.address, b.hash AS pe_file
 ### List Structs in PE File
 
 ```cypher
-MATCH (b:Blob {hash: $blob_hash})-[r:HAS_STRUCT]->(s:WinStruct)
+MATCH (b:Blob {hash: $blob_hash})-[r:HAS_STRUCT]->(s:Struct)
 RETURN r.name AS struct_name, s.size, s.kind
 ORDER BY r.name
 ```
@@ -180,7 +180,7 @@ ORDER BY r.name
 ### Get Struct Definition
 
 ```cypher
-MATCH (s:WinStruct {hash: $struct_hash})-[r:HAS_FIELD]->(f:WinStructField)
+MATCH (s:Struct {hash: $struct_hash})-[r:HAS_FIELD]->(f:StructField)
 RETURN r.name AS field_name, f.offset, f.data_type
 ORDER BY f.offset
 ```
@@ -188,7 +188,7 @@ ORDER BY f.offset
 ### Find Struct by Name
 
 ```cypher
-MATCH (b:Blob)-[r:HAS_STRUCT]->(s:WinStruct)
+MATCH (b:Blob)-[r:HAS_STRUCT]->(s:Struct)
 WHERE r.name = "_EPROCESS"
 RETURN b.hash AS pe_file, s.hash, s.size
 ```
@@ -197,7 +197,7 @@ RETURN b.hash AS pe_file, s.hash, s.size
 
 ```cypher
 // Find all versions of _EPROCESS
-MATCH (b:Blob)-[r:HAS_STRUCT {name: "_EPROCESS"}]->(s:WinStruct)
+MATCH (b:Blob)-[r:HAS_STRUCT {name: "_EPROCESS"}]->(s:Struct)
 RETURN DISTINCT s.hash, s.size
 ORDER BY s.size
 ```
@@ -205,7 +205,7 @@ ORDER BY s.size
 ### Get Struct Fields with Types
 
 ```cypher
-MATCH (s:WinStruct)-[r:HAS_FIELD]->(f:WinStructField)
+MATCH (s:Struct)-[r:HAS_FIELD]->(f:StructField)
 WHERE s.hash = $struct_hash
 RETURN r.name AS name, f.offset, f.data_type
 ORDER BY f.offset

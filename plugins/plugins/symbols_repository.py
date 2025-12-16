@@ -59,14 +59,14 @@ class SymbolsRepository:
 
         Args:
             blob_hash: Hash of the PE file blob
-            struct_node: WinStructMerkleNode with hash, size, kind, name
+            struct_node: StructMerkleNode with hash, size, kind, name
             unwind_param: List of field dicts with hash, name, offset, data_type
         """
         query = """
-        MERGE (s:WinStruct {hash: $hash, size: $size, kind: $kind})
+        MERGE (s:Struct {hash: $hash, size: $size, kind: $kind})
         WITH s
         UNWIND $unwind_param as x
-        MERGE (f:WinStructField {hash: x.hash, offset: x.offset, data_type: x.data_type})
+        MERGE (f:StructField {hash: x.hash, offset: x.offset, data_type: x.data_type})
         MERGE (s)-[:HAS_FIELD {name: x.name}]->(f)
         WITH s
         MATCH (b:Blob {hash: $blob_hash})
@@ -89,10 +89,10 @@ class SymbolsRepository:
         """Insert Windows data type into Neo4j.
 
         Args:
-            node: WinDataTypeMerkleNode with type metadata
+            node: DataTypeMerkleNode with type metadata
         """
         query = """
-        MERGE (d:WinDataType {hash: $hash})  // Ensure 'hash' uniquely identifies 'WinDataType'
+        MERGE (d:DataType {hash: $hash})  // Ensure 'hash' uniquely identifies 'DataType'
         ON CREATE SET
             d.type = CASE WHEN $type IS NOT NULL THEN $type END,
             d.name = CASE WHEN $name IS NOT NULL THEN $name END,
@@ -107,7 +107,7 @@ class SymbolsRepository:
             d.bit_length = CASE WHEN $bit_length IS NOT NULL THEN $bit_length END
         WITH d
         UNWIND $children AS child
-        MERGE (c:WinDataType {hash: child.hash})  // Assuming 'hash' is unique for child nodes too
+        MERGE (c:DataType {hash: child.hash})  // Assuming 'hash' is unique for child nodes too
         ON CREATE SET
             c.type = CASE WHEN child.type IS NOT NULL THEN child.type END,
             c.name = CASE WHEN child.name IS NOT NULL THEN child.name END,

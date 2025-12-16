@@ -128,7 +128,7 @@ Represents a user-defined type: struct, union, or enum.
 | `size` | integer | Size in bytes |
 | `kind` | string | "Struct", "Union", or "Enum" |
 
-**Relationship**: `(:Blob)-[:HAS_STRUCT {name: "_EPROCESS"}]->(:WinStruct)`
+**Relationship**: `(:Blob)-[:HAS_STRUCT {name: "_EPROCESS"}]->(:Struct)`
 
 **Hash Computation**:
 ```python
@@ -143,7 +143,7 @@ hash = SHA1(
 **Example**:
 ```cypher
 (:Blob {hash: "abc123"})-[:HAS_STRUCT {name: "_EPROCESS"}]->
-  (:WinStruct {hash: "ghi789", size: 1024, kind: "Struct"})
+  (:Struct {hash: "ghi789", size: 1024, kind: "Struct"})
 ```
 
 **Source**: Parsed from PDB JSON `user_types` section
@@ -158,7 +158,7 @@ Represents a field within a struct/union or a constant in an enum.
 | `offset` | integer | Byte offset within parent struct (or enum constant value) |
 | `data_type` | string | JSON-encoded type definition |
 
-**Relationship**: `(:WinStruct)-[:HAS_FIELD {name: "UniqueProcessId"}]->(:WinStructField)`
+**Relationship**: `(:Struct)-[:HAS_FIELD {name: "UniqueProcessId"}]->(:StructField)`
 
 **data_type Format**: JSON string representing type metadata:
 ```json
@@ -173,8 +173,8 @@ Represents a field within a struct/union or a constant in an enum.
 
 **Example**:
 ```cypher
-(:WinStruct {hash: "ghi789"})-[:HAS_FIELD {name: "UniqueProcessId"}]->
-  (:WinStructField {
+(:Struct {hash: "ghi789"})-[:HAS_FIELD {name: "UniqueProcessId"}]->
+  (:StructField {
     hash: "jkl012",
     offset: 1088,
     data_type: '{"kind": "pointer", "subtype": {"kind": "base", "name": "void"}}'
@@ -200,7 +200,7 @@ Represents complex type definitions that can reference other types.
 | `bit_position` | integer | Bit offset within field (for Bitfield type) |
 | `bit_length` | integer | Bit width (for Bitfield type) |
 
-**Relationship**: `(:WinDataType)-[:HAS_DATA_TYPE]->(:WinDataType)`
+**Relationship**: `(:DataType)-[:HAS_DATA_TYPE]->(:DataType)`
 
 **FieldKindType Values**:
 - `Base`: Primitive types (int, char, void, etc.)
@@ -212,9 +212,9 @@ Represents complex type definitions that can reference other types.
 
 **Example - Pointer to Array**:
 ```cypher
-(:WinDataType {hash: "xyz123", type: "Pointer", name: null})-[:HAS_DATA_TYPE]->
-  (:WinDataType {hash: "xyz456", type: "Array", array_counter: 10})-[:HAS_DATA_TYPE]->
-    (:WinDataType {hash: "xyz789", type: "Struct", name: "_EPROCESS"})
+(:DataType {hash: "xyz123", type: "Pointer", name: null})-[:HAS_DATA_TYPE]->
+  (:DataType {hash: "xyz456", type: "Array", array_counter: 10})-[:HAS_DATA_TYPE]->
+    (:DataType {hash: "xyz789", type: "Struct", name: "_EPROCESS"})
 ```
 
 This represents: `_EPROCESS (*)[10]` - pointer to array of 10 _EPROCESS structs
@@ -438,7 +438,7 @@ if "user_types" in j_pdb:
     with SymbolsMerkleVisitor(thread=True) as visitor:
         # Create domain nodes for all structs
         for struct_name, struct_data in sorted(j_pdb["user_types"].items()):
-            struct_node = WinStructNode(name=struct_name, struct_data=struct_data)
+            struct_node = StructNode(name=struct_name, struct_data=struct_data)
             visitor.run_visit(struct_node)
 
         # Retrieve computed Merkle nodes
@@ -446,19 +446,19 @@ if "user_types" in j_pdb:
             merkle_node = visited_node.return_value
 
             # Insert into Neo4j
-            if isinstance(merkle_node, WinStructMerkleNode):
+            if isinstance(merkle_node, StructMerkleNode):
                 self.insert_struct_merkle(blob_hash, merkle_node)
-            elif isinstance(merkle_node, WinDataTypeMerkleNode):
+            elif isinstance(merkle_node, DataTypeMerkleNode):
                 self.repository.insert_data_type(merkle_node)
 ```
 
 ### Step 5: Compute Merkle Hashes
 
-#### WinStructNode Visitor
+#### StructNode Visitor
 
 ```python
 # symbols.py:228-251
-def visit_WinStructNode(self, node: WinStructNode, hash_obj: hashlib._Hash):
+def visit_StructNode(self, node: StructNode, hash_obj: hashlib._Hash):
     children = {}
 
     # Visit all field children (bottom-up)
@@ -476,7 +476,7 @@ def visit_WinStructNode(self, node: WinStructNode, hash_obj: hashlib._Hash):
     hash_obj.update(f"{node.size}-{node.kind.name}".encode())
 
     # Create Merkle node
-    merkle_node = WinStructMerkleNode(
+    merkle_node = StructMerkleNode(
         hash=hash_obj.hexdigest(),
         children=children,
         label=MerkleLabel.Tree,  # Internal node (has fields)
@@ -498,17 +498,17 @@ hash(_EPROCESS) = SHA1(
 )
 ```
 
-#### WinStructFieldNode Visitor
+#### StructFieldNode Visitor
 
 ```python
 # symbols.py:253-280
-def visit_WinStructFieldNode(self, node: WinStructFieldNode, hash_obj: hashlib._Hash):
+def visit_StructFieldNode(self, node: StructFieldNode, hash_obj: hashlib._Hash):
     # Hash field offset
     hash_obj.update(str(node.offset).encode())
 
     # Hash field type (recursively visit data type if complex)
     if "type" in node.field_data:
-        type_node = WinDataTypeNode(type_data=node.field_data["type"])
+        type_node = DataTypeNode(type_data=node.field_data["type"])
         visited_type = self.visit(type_node)
         merkle_type = visited_type.return_value
 
@@ -519,7 +519,7 @@ def visit_WinStructFieldNode(self, node: WinStructFieldNode, hash_obj: hashlib._
     else:
         data_type_json = ""
 
-    merkle_node = WinStructFieldMerkleNode(
+    merkle_node = StructFieldMerkleNode(
         hash=hash_obj.hexdigest(),
         label=MerkleLabel.Blob,  # Leaf node
         name=node.name,
@@ -529,11 +529,11 @@ def visit_WinStructFieldNode(self, node: WinStructFieldNode, hash_obj: hashlib._
     return VisitedNode(node, merkle_node)
 ```
 
-#### WinDataTypeNode Visitor (Recursive)
+#### DataTypeNode Visitor (Recursive)
 
 ```python
 # symbols.py:282-320
-def visit_WinDataTypeNode(self, node: WinDataTypeNode, hash_obj: hashlib._Hash):
+def visit_DataTypeNode(self, node: DataTypeNode, hash_obj: hashlib._Hash):
     children = {}
 
     # Hash type kind and name
@@ -557,7 +557,7 @@ def visit_WinDataTypeNode(self, node: WinDataTypeNode, hash_obj: hashlib._Hash):
         hash_obj.update(merkle_child.hash.encode())
         children[merkle_child.hash] = merkle_child
 
-    merkle_node = WinDataTypeMerkleNode(
+    merkle_node = DataTypeMerkleNode(
         hash=hash_obj.hexdigest(),
         children=children,
         label=MerkleLabel.Tree if children else MerkleLabel.Blob,
@@ -575,9 +575,9 @@ def visit_WinDataTypeNode(self, node: WinDataTypeNode, hash_obj: hashlib._Hash):
 Type: `_EPROCESS (*)[10]`
 
 ```
-WinDataTypeNode(kind=Pointer)
-  └─ child: WinDataTypeNode(kind=Array, array_counter=10)
-       └─ child: WinDataTypeNode(kind=Struct, name="_EPROCESS")
+DataTypeNode(kind=Pointer)
+  └─ child: DataTypeNode(kind=Array, array_counter=10)
+       └─ child: DataTypeNode(kind=Struct, name="_EPROCESS")
 
 Hash computation (bottom-up):
 1. hash(Struct) = SHA1("Struct" + "_EPROCESS") = "abc123"
@@ -593,10 +593,10 @@ Hash computation (bottom-up):
 # symbols_repository.py:57-86
 def insert_struct(self, blob_hash: str, struct_node, unwind_param: List[Dict]) -> None:
     query = """
-    MERGE (s:WinStruct {hash: $hash, size: $size, kind: $kind})
+    MERGE (s:Struct {hash: $hash, size: $size, kind: $kind})
     WITH s
     UNWIND $unwind_param as x
-    MERGE (f:WinStructField {hash: x.hash, offset: x.offset, data_type: x.data_type})
+    MERGE (f:StructField {hash: x.hash, offset: x.offset, data_type: x.data_type})
     MERGE (s)-[:HAS_FIELD {name: x.name}]->(f)
     WITH s
     MATCH (b:Blob {hash: $blob_hash})
@@ -653,7 +653,7 @@ def insert_data_type(self, node) -> None:
     ]
 
     query = """
-    MERGE (d:WinDataType {hash: $hash})
+    MERGE (d:DataType {hash: $hash})
     ON CREATE SET
         d.type = CASE WHEN $type IS NOT NULL THEN $type END,
         d.name = CASE WHEN $name IS NOT NULL THEN $name END,
@@ -668,7 +668,7 @@ def insert_data_type(self, node) -> None:
         d.bit_length = CASE WHEN $bit_length IS NOT NULL THEN $bit_length END
     WITH d
     UNWIND $children AS child
-    MERGE (c:WinDataType {hash: child.hash})
+    MERGE (c:DataType {hash: child.hash})
     ON CREATE SET
         c.type = CASE WHEN child.type IS NOT NULL THEN child.type END,
         c.name = CASE WHEN child.name IS NOT NULL THEN child.name END,
@@ -736,7 +736,7 @@ def test_filters_mangled_names_with_question_mark(self):
 
 **`tests/plugins/symbols/test_models.py`**:
 
-1. **TestWinStructNode**: 7 tests
+1. **TestStructNode**: 7 tests
    - Struct kind detection
    - Union kind detection
    - Enum detection (by `constants` field)
@@ -744,7 +744,7 @@ def test_filters_mangled_names_with_question_mark(self):
    - Enum constant mapping (constants become fields)
    - Empty struct handling
 
-2. **TestWinStructFieldNode**: 4 tests
+2. **TestStructFieldNode**: 4 tests
    - Offset extraction
    - Data type JSON encoding
    - Complex nested type encoding
@@ -759,7 +759,7 @@ def test_filters_mangled_names_with_question_mark(self):
 def test_enum_detection_by_constants(self):
     """Should detect enum when constants field present."""
     data = {"size": 4, "constants": {"A": 0, "B": 1}}
-    node = WinStructNode(name="TestEnum", struct_data=data)
+    node = StructNode(name="TestEnum", struct_data=data)
 
     assert node.kind == UserTypeKindType.Enum
     assert node.size == 4
@@ -804,7 +804,7 @@ Integration tests are out of scope per user requirements, but would include:
 2. **Batch Insertion**:
    ```python
    UNWIND $unwind_param as x
-   MERGE (f:WinStructField {hash: x.hash, ...})
+   MERGE (f:StructField {hash: x.hash, ...})
    # Single query for all fields
    ```
 
@@ -835,7 +835,7 @@ ORDER BY r.name
 ### Find All Structs with a Specific Field
 
 ```cypher
-MATCH (s:WinStruct)-[r:HAS_FIELD {name: "UniqueProcessId"}]->(f:WinStructField)
+MATCH (s:Struct)-[r:HAS_FIELD {name: "UniqueProcessId"}]->(f:StructField)
 MATCH (b:Blob)-[rel:HAS_STRUCT]->(s)
 RETURN rel.name AS struct_name, b.hash AS source_file, f.offset AS field_offset
 ```
@@ -845,8 +845,8 @@ RETURN rel.name AS struct_name, b.hash AS source_file, f.offset AS field_offset
 ```cypher
 MATCH (c1:Commit {hash: $commit1})-[:OWNS_FILESYSTEM]->(fs1:Tree)
 MATCH (c2:Commit {hash: $commit2})-[:OWNS_FILESYSTEM]->(fs2:Tree)
-MATCH (fs1)-[:HAS_CHILD_BLOB*]->(b1:Blob)-[r1:HAS_STRUCT {name: "_EPROCESS"}]->(s1:WinStruct)
-MATCH (fs2)-[:HAS_CHILD_BLOB*]->(b2:Blob)-[r2:HAS_STRUCT {name: "_EPROCESS"}]->(s2:WinStruct)
+MATCH (fs1)-[:HAS_CHILD_BLOB*]->(b1:Blob)-[r1:HAS_STRUCT {name: "_EPROCESS"}]->(s1:Struct)
+MATCH (fs2)-[:HAS_CHILD_BLOB*]->(b2:Blob)-[r2:HAS_STRUCT {name: "_EPROCESS"}]->(s2:Struct)
 WHERE s1.hash <> s2.hash
 RETURN s1.hash AS old_hash, s2.hash AS new_hash, s1.size AS old_size, s2.size AS new_size
 ```
@@ -854,7 +854,7 @@ RETURN s1.hash AS old_hash, s2.hash AS new_hash, s1.size AS old_size, s2.size AS
 ### Find All Pointer Types
 
 ```cypher
-MATCH (d:WinDataType {type: "Pointer"})-[:HAS_DATA_TYPE]->(target:WinDataType)
+MATCH (d:DataType {type: "Pointer"})-[:HAS_DATA_TYPE]->(target:DataType)
 RETURN d.hash, target.type AS points_to_type, target.name AS points_to_name
 LIMIT 100
 ```
@@ -862,7 +862,7 @@ LIMIT 100
 ### Trace Complex Type Hierarchy
 
 ```cypher
-MATCH path = (root:WinDataType {hash: $type_hash})-[:HAS_DATA_TYPE*]->(leaf:WinDataType)
+MATCH path = (root:DataType {hash: $type_hash})-[:HAS_DATA_TYPE*]->(leaf:DataType)
 WHERE NOT (leaf)-[:HAS_DATA_TYPE]->()
 RETURN [n IN nodes(path) | {type: n.type, name: n.name, array_counter: n.array_counter}] AS type_chain
 ```
@@ -974,7 +974,7 @@ with ThreadPoolExecutor(max_workers=3) as executor:
 Currently, `WinStructField.data_type` is a JSON string. Could create explicit relationship:
 
 ```cypher
-(:WinStructField)-[:HAS_DATA_TYPE]->(:WinDataType)
+(:StructField)-[:HAS_DATA_TYPE]->(:DataType)
 ```
 
 This would enable graph queries like "find all structs with pointer fields".
@@ -994,7 +994,7 @@ def diff_structs(old_hash: str, new_hash: str) -> List[str]:
 Link struct fields to symbol addresses:
 
 ```cypher
-MATCH (sym:Symbol)-[:REFERENCES_STRUCT]->(s:WinStruct)
+MATCH (sym:Symbol)-[:REFERENCES_STRUCT]->(s:Struct)
 WHERE sym.name =~ ".*_EPROCESS.*"
 RETURN sym.name, s.hash
 ```
