@@ -36,10 +36,11 @@ def setup_logging(debug_enabled: bool):
 
 @click.command()
 @click.option("--debug", "-d", is_flag=True, help="Toggle debug output")
+@click.option("--force", "-f", is_flag=True, help="Force rerun even if plugin was already executed")
 @click.argument("commit_hash")
 @click.argument("plugin_type_str")
 @post_mortem
-def runner(debug, commit_hash: str, plugin_type_str: str):
+def runner(debug, force, commit_hash: str, plugin_type_str: str):
     """Plugin Runner"""
     setup_logging(debug)
     # get plugin type enum
@@ -65,4 +66,4 @@ def runner(debug, commit_hash: str, plugin_type_str: str):
     # instantiate plugin
     with plugin_cls() as plugin:
         # __call__
-        plugin(commit, plugin_type_str)
+        plugin(commit, plugin_type_str, force=force)

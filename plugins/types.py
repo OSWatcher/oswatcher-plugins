@@ -37,16 +37,28 @@ class AbstractPlugin(BetterContextManager):
     )
     neogit: Neogit = field(init=False, default=Neogit())
 
-    def __call__(self, commit: Commit, plugin_name: str, *args: Any, **kwds: Any) -> Any:
-        """Execute the run method inside a neomodel transaction"""
+    def __call__(self, commit: Commit, plugin_name: str, *args: Any, force: bool = False, **kwds: Any) -> Any:
+        """Execute the run method inside a neomodel transaction
+
+        Args:
+            commit: The commit to process
+            plugin_name: Name of the plugin being run
+            force: If True, rerun the plugin even if already executed
+        """
         with suppress(IndexError):
             plugin_run_node = commit.plugin.all()[0]
             plugin_date = getattr(plugin_run_node, plugin_name, None)
-            if plugin_date is not None:
+            if plugin_date is not None and not force:
                 self.logger.info(
                     "Plugin run node already executed at %s for commit %s", plugin_run_node.filetype, commit.hash
                 )
                 return
+            if plugin_date is not None and force:
+                self.logger.info(
+                    "Force rerun enabled - re-executing plugin for commit %s (previously run at %s)",
+                    commit.hash,
+                    plugin_date,
+                )
         # can't mix schema modification and write query in the same transaction
         with self.neogit.db.transaction:
             self.ensure_constraints()
