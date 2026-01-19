@@ -287,25 +287,23 @@ class SymbolsMerkleVisitor(MerkleVisitor):
 def parse_code_view(pe_path):
     pe = lief.parse(pe_path)
     for debug_dir in pe.debug:
-        if debug_dir.has_code_view:
-            code_view = debug_dir.code_view
-
-            part1_bin = code_view.signature[:4]
+        if debug_dir.type == lief.PE.Debug.TYPES.CODEVIEW:
+            part1_bin = debug_dir.signature[:4]
             part1_bin.reverse()
             part1 = bytearray(part1_bin)
-            part2_bin = code_view.signature[4:6]
+            part2_bin = debug_dir.signature[4:6]
             part2_bin.reverse()
             part2 = bytearray(part2_bin)
-            part3_bin = code_view.signature[6:8]
+            part3_bin = debug_dir.signature[6:8]
             part3_bin.reverse()
             part3 = bytearray(part3_bin)
-            part4_bin = code_view.signature[8:]
+            part4_bin = debug_dir.signature[8:]
             part4 = bytearray(part4_bin)
 
             guid = (
                 f"{hexlify(part1).decode()}{hexlify(part2).decode()}{hexlify(part3).decode()}{hexlify(part4).decode()}"
             )
-            return guid, code_view.age & 0xF, code_view.filename
+            return guid, debug_dir.age & 0xF, debug_dir.filename
 
 
 def _pdb_progress_callback(percentage, description):
