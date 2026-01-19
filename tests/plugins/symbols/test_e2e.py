@@ -8,6 +8,7 @@ Subsequent runs use volatility's built-in caching (~/.cache/volatility3/).
 
 from unittest.mock import MagicMock, patch
 
+import lief
 import pytest
 from neogit.core.model.merkle import MerkleLabel, MerkleNode
 from neogit.service.neogit import cypher_query_with_backoff
@@ -112,14 +113,11 @@ def test_symbols_plugin_real_pdb(
     ]
 
     mock_pe = MagicMock()
-    mock_code_view = MagicMock()
-    mock_code_view.signature = signature_bytes
-    mock_code_view.age = 1
-    mock_code_view.filename = "ntkrnlmp.pdb"
-
     mock_debug = MagicMock()
-    mock_debug.has_code_view = True
-    mock_debug.code_view = mock_code_view
+    mock_debug.type = lief.PE.Debug.TYPES.CODEVIEW
+    mock_debug.signature = signature_bytes
+    mock_debug.age = 1
+    mock_debug.filename = "ntkrnlmp.pdb"
 
     mock_pe.debug = [mock_debug]
     mock_lief_parse.return_value = mock_pe
