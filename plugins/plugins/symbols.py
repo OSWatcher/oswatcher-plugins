@@ -364,7 +364,15 @@ class SymbolsPlugin(AbstractPlugin):
 
         # Use repository to query PE blobs
         all_blobs = self.repository.query_pe_blobs(fs.hash, self.__class__.PE_MIME_TYPE)
+        self.logger.info("Found %d PE blobs for commit %s", len(all_blobs), commit.hash)
         blob_results = filter_valid_filenames(all_blobs, self.FILTER_FILENAME)
+        if not blob_results:
+            self.logger.info(
+                "No matching PE blobs after filename filter %s for commit %s",
+                self.FILTER_FILENAME,
+                commit.hash,
+            )
+            return
         stage = pl.process.map(self.stage_parse_code_view, blob_results, workers=4)
         stage = pl.process.map(self.stage_process_pdb, stage, workers=self.max_workers, maxsize=self.max_workers)
         for ret in stage:
