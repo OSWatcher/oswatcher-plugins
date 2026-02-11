@@ -7,19 +7,6 @@ from typing import TYPE_CHECKING, List, Optional
 import lief
 from neogit.model.merkle import Blob, Tree
 
-# PE machine type constants (from COFF header)
-_PE_MACHINE_AMD64 = 0x8664
-_PE_MACHINE_I386 = 0x014C
-_PE_MACHINE_ARM64 = 0xAA64
-_PE_MACHINE_ARM = 0x01C0
-
-_PE_MACHINE_TO_ARCH = {
-    _PE_MACHINE_AMD64: "x86_64",
-    _PE_MACHINE_I386: "i386",
-    _PE_MACHINE_ARM64: "aarch64",
-    _PE_MACHINE_ARM: "arm",
-}
-
 if TYPE_CHECKING:
     from plugins.types import AbstractPlugin
 

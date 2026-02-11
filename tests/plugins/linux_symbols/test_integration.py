@@ -270,12 +270,7 @@ class TestRunDwarf2json:
 
         mock_proc = MagicMock()
         mock_proc.returncode = 0
-        mock_proc.stderr = MagicMock()
-
-        # json.load reads from the stdout file-like object
-        import io
-
-        mock_proc.stdout = io.BytesIO(json.dumps(fake_output).encode())
+        mock_proc.communicate.return_value = (json.dumps(fake_output).encode(), b"")
 
         with patch("plugins.plugins.linux_symbols_service.subprocess.Popen", return_value=mock_proc):
             result = run_dwarf2json(Path("/fake/vmlinux"))
@@ -290,12 +285,7 @@ class TestRunDwarf2json:
         """Should raise RuntimeError when dwarf2json fails."""
         mock_proc = MagicMock()
         mock_proc.returncode = 1
-        mock_proc.stderr = MagicMock()
-        mock_proc.stderr.read.return_value = b"error: invalid ELF"
-
-        import io
-
-        mock_proc.stdout = io.BytesIO(b"{}")
+        mock_proc.communicate.return_value = (b"{}", b"error: invalid ELF")
 
         with patch("plugins.plugins.linux_symbols_service.subprocess.Popen", return_value=mock_proc):
             with pytest.raises(RuntimeError, match="dwarf2json failed"):

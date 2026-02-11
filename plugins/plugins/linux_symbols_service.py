@@ -335,15 +335,13 @@ def run_dwarf2json(vmlinux_path: Path) -> Dict[str, Any]:
             "dwarf2json not found on PATH. " "Install from https://github.com/volatilityfoundation/dwarf2json"
         )
 
-    # Stream-parse JSON directly from stdout to avoid buffering the entire output
-    data = json.load(proc.stdout)
-    proc.wait()
+    stdout_bytes, stderr_bytes = proc.communicate()
 
     if proc.returncode != 0:
-        stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
+        stderr = stderr_bytes.decode("utf-8", errors="replace")
         raise RuntimeError(f"dwarf2json failed with exit code {proc.returncode}: {stderr}")
 
-    return data
+    return json.loads(stdout_bytes)
 
 
 def parse_symbols_for_neo4j(symbols_dict: Dict[str, Dict]) -> List[Dict[str, str]]:

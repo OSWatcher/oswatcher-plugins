@@ -46,8 +46,7 @@ def lief_arch_to_ddeb_arch(lief_arch: str) -> str:
         return "armhf"
     if "i386" in arch_lower or "i686" in arch_lower:
         return "i386"
-    # Default fallback
-    return "amd64"
+    raise ValueError(f"Unrecognized architecture: {lief_arch!r}")
 
 
 @define(auto_attribs=True)
