@@ -27,6 +27,7 @@ volatility3 = "^2.26.2"
 regipy = "^4.1.1"
 jsonschema = "^4.21.1"
 pypeln = "^0.4.9"
+requests = "^2.31"
 # setuptools required for pkg_resources compatibility
 # pypeln -> stopit -> pkg_resources (may be missing in some virtual environments)
 # See: https://github.com/glenfant/stopit/issues/32
@@ -42,6 +43,7 @@ isort = "5.11.4"
 mypy = "1.9.0"
 appdirs-stubs = "^0.1.0"
 types-appdirs = "^1.4.3.1"
+types-requests = "^2.31"
 ipdb = "^0.13.13"
 pdbpp = "^0.11.7"
 pytest = "^8.0.0"
