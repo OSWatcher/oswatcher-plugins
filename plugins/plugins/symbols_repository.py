@@ -43,14 +43,15 @@ class SymbolsRepository:
 
         Args:
             blob_hash: Hash of the PE file blob
-            param_list: List of dicts with hash, sym_name, and address keys
+            param_list: List of dicts with hash, address, and symbol name key
+                (`sym_name` or `name`)
         """
         query = """
         MATCH (b:Blob {hash: $blob_hash})
         WITH b
         UNWIND $unwind as p
         MERGE (s:Symbol {hash: p.hash, address: p.address})
-        MERGE (b)-[:HAS_SYMBOL {name: p.sym_name}]->(s)
+        MERGE (b)-[:HAS_SYMBOL {name: coalesce(p.sym_name, p.name)}]->(s)
         """
         cypher_query_with_backoff(query, {"blob_hash": blob_hash, "unwind": param_list})
 
