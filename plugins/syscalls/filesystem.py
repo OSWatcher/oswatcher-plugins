@@ -7,6 +7,19 @@ from typing import TYPE_CHECKING, List, Optional
 import lief
 from neogit.model.merkle import Blob, Tree
 
+# PE machine type constants (from COFF header)
+_PE_MACHINE_AMD64 = 0x8664
+_PE_MACHINE_I386 = 0x014C
+_PE_MACHINE_ARM64 = 0xAA64
+_PE_MACHINE_ARM = 0x01C0
+
+_PE_MACHINE_TO_ARCH = {
+    _PE_MACHINE_AMD64: "x86_64",
+    _PE_MACHINE_I386: "i386",
+    _PE_MACHINE_ARM64: "aarch64",
+    _PE_MACHINE_ARM: "arm",
+}
+
 if TYPE_CHECKING:
     from plugins.types import AbstractPlugin
 
@@ -22,27 +35,34 @@ class KernelInfo:
 
 
 def detect_kernel_arch(vmlinuz_path: str) -> str:
-    """Detect kernel architecture using lief ELF parser.
+    """Detect kernel architecture using lief parser.
+
+    Handles both raw ELF kernels (vmlinux) and compressed vmlinuz files
+    with an EFI boot stub (PE header).
 
     Args:
         vmlinuz_path: Path to vmlinuz file (local filesystem)
 
     Returns:
-        Architecture string from lief enum (e.g., "ARCH.x86_64", "ARCH.AARCH64")
+        Architecture string from lief enum (e.g., "ARCH.x86_64", "MACHINE_TYPES.AMD64")
 
     Raises:
-        ValueError: If file cannot be parsed or is not ELF format
+        ValueError: If file cannot be parsed or architecture cannot be determined
     """
     binary = lief.parse(vmlinuz_path)
 
     if binary is None:
         raise ValueError(f"Failed to parse {vmlinuz_path}")
 
-    # Check if it's an ELF binary
+    # Raw ELF kernel (e.g., vmlinux)
     if isinstance(binary, lief.ELF.Binary):
         return str(binary.header.machine_type)
 
-    raise ValueError(f"Not an ELF file: {vmlinuz_path}")
+    # Compressed vmlinuz with EFI boot stub (PE header)
+    if isinstance(binary, lief.PE.Binary):
+        return str(binary.header.machine)
+
+    raise ValueError(f"Unsupported binary format: {vmlinuz_path}")
 
 
 def get_boot_directory(root: Tree) -> Optional[Tree]:
