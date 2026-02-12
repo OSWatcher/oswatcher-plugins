@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "plugins"
-version = "0.12.7"
+version = "0.13.0"
 description = ""
 authors = ["Mathieu Tarral <mathieu.tarral@protonmail.com>"]
 license = "private"
