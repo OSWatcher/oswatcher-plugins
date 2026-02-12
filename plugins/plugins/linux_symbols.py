@@ -126,8 +126,8 @@ class LinuxSymbolsPlugin(AbstractPlugin):
         for kernel_info in kernel_info_list:
             try:
                 self._process_kernel(kernel_info, codename)
-            except Exception as e:
-                self.logger.error(f"Failed to process kernel {kernel_info.filename}: {e}")
+            except Exception:
+                self.logger.exception(f"Failed to process kernel {kernel_info.filename}")
 
         self.logger.info(f"Linux symbol extraction complete for commit {commit.hash}")
 
