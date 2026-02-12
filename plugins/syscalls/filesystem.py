@@ -22,27 +22,34 @@ class KernelInfo:
 
 
 def detect_kernel_arch(vmlinuz_path: str) -> str:
-    """Detect kernel architecture using lief ELF parser.
+    """Detect kernel architecture using lief parser.
+
+    Handles both raw ELF kernels (vmlinux) and compressed vmlinuz files
+    with an EFI boot stub (PE header).
 
     Args:
         vmlinuz_path: Path to vmlinuz file (local filesystem)
 
     Returns:
-        Architecture string from lief enum (e.g., "ARCH.x86_64", "ARCH.AARCH64")
+        Architecture string from lief enum (e.g., "ARCH.x86_64", "MACHINE_TYPES.AMD64")
 
     Raises:
-        ValueError: If file cannot be parsed or is not ELF format
+        ValueError: If file cannot be parsed or architecture cannot be determined
     """
     binary = lief.parse(vmlinuz_path)
 
     if binary is None:
         raise ValueError(f"Failed to parse {vmlinuz_path}")
 
-    # Check if it's an ELF binary
+    # Raw ELF kernel (e.g., vmlinux)
     if isinstance(binary, lief.ELF.Binary):
         return str(binary.header.machine_type)
 
-    raise ValueError(f"Not an ELF file: {vmlinuz_path}")
+    # Compressed vmlinuz with EFI boot stub (PE header)
+    if isinstance(binary, lief.PE.Binary):
+        return str(binary.header.machine)
+
+    raise ValueError(f"Unsupported binary format: {vmlinuz_path}")
 
 
 def get_boot_directory(root: Tree) -> Optional[Tree]:
