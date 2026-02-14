@@ -122,55 +122,51 @@ def resolve_ddeb_url_from_packages(
 ) -> Optional[str]:
     """Resolve exact ddeb URL by scanning ddebs Packages indexes.
 
-    This avoids brittle assumptions about package revision numbers.
+    Only searches for the unsigned dbgsym package, which contains
+    the actual vmlinux with DWARF debug info. The signed variant
+    is a stub with no debug symbols.
+
+    Searches the provided codename's suites first. If no codename is
+    given, falls back to a list of known LTS/current releases.
     """
-    base_hosts = ["http://ddebs.ubuntu.com", "https://ddebs.ubuntu.com"]
-    package_names = [
-        f"linux-image-unsigned-{kernel_version}-{build}-{flavor}-dbgsym",
-        f"linux-image-{kernel_version}-{build}-{flavor}-dbgsym",
-    ]
-    fallback_codenames = ["noble", "oracular", "plucky", "jammy", "focal"]
-    codenames: List[str] = []
+    package_name = f"linux-image-unsigned-{kernel_version}-{build}-{flavor}-dbgsym"
+    base_url = "http://ddebs.ubuntu.com"
+
+    # Determine which codenames to search
     if codename:
-        codenames.append(codename)
-    codenames.extend([x for x in fallback_codenames if x not in codenames])
-    suites = []
+        codenames = [codename]
+    else:
+        codenames = ["noble", "jammy", "focal"]
+
     for release in codenames:
-        suites.extend([release, f"{release}-updates", f"{release}-security", f"{release}-proposed"])
-    components = ["main", "restricted", "universe", "multiverse"]
-    index_variants = ["Packages.xz", "Packages.gz", "Packages"]
+        for suite in [release, f"{release}-updates", f"{release}-proposed"]:
+            for index_name in ["Packages.xz", "Packages.gz"]:
+                index_url = f"{base_url}/dists/{suite}/main/binary-{arch}/{index_name}"
+                try:
+                    response = requests.get(index_url, timeout=timeout)
+                    response.raise_for_status()
+                except requests.RequestException:
+                    continue
 
-    for base_url in base_hosts:
-        for suite in suites:
-            for component in components:
-                for index_name in index_variants:
-                    index_url = f"{base_url}/dists/{suite}/{component}/binary-{arch}/{index_name}"
-                    try:
-                        response = requests.get(index_url, timeout=timeout)
-                        response.raise_for_status()
-                    except requests.RequestException:
-                        continue
+                try:
+                    if index_name.endswith(".xz"):
+                        content = lzma.decompress(response.content).decode("utf-8", errors="replace")
+                    elif index_name.endswith(".gz"):
+                        content = gzip.decompress(response.content).decode("utf-8", errors="replace")
+                    else:
+                        content = response.text
+                except (lzma.LZMAError, gzip.BadGzipFile, UnicodeDecodeError):
+                    continue
 
-                    try:
-                        if index_name.endswith(".xz"):
-                            content = lzma.decompress(response.content).decode("utf-8", errors="replace")
-                        elif index_name.endswith(".gz"):
-                            content = gzip.decompress(response.content).decode("utf-8", errors="replace")
-                        else:
-                            content = response.text
-                    except (lzma.LZMAError, gzip.BadGzipFile, UnicodeDecodeError):
-                        continue
-
-                    filename = _parse_packages_index_for_filename(content, package_names, arch)
-                    if filename:
-                        return f"{base_url}/{filename.lstrip('/')}"
+                filename = _parse_packages_index_for_filename(content, [package_name], arch)
+                if filename:
+                    return f"{base_url}/{filename.lstrip('/')}"
+                # Successfully parsed this index; skip other compression variants
+                break
 
     # Fallback: scan pool directory listing directly.
-    pool_url = _resolve_ddeb_url_from_pool_listing(kernel_version, build, flavor, arch, timeout)
-    if pool_url:
-        return pool_url
-
-    return None
+    major_minor = ".".join(kernel_version.split(".")[:2])
+    return _resolve_ddeb_url_from_pool_listing(kernel_version, build, flavor, arch, major_minor, timeout)
 
 
 def _resolve_ddeb_url_from_pool_listing(
@@ -178,32 +174,29 @@ def _resolve_ddeb_url_from_pool_listing(
     build: str,
     flavor: str,
     arch: str,
+    major_minor: str,
     timeout: int = 30,
 ) -> Optional[str]:
-    """Resolve ddeb URL by matching filenames in the pool directory listing."""
+    """Resolve ddeb URL by matching filenames in the pool directory listing.
+
+    Searches both the main linux pool and HWE-specific pool directories.
+    Only looks for unsigned dbgsym packages.
+    """
     pool_urls = [
         "http://ddebs.ubuntu.com/pool/main/l/linux/",
-        "http://ddebs.ubuntu.com/ubuntu/pool/main/l/linux/",
-        "https://ddebs.ubuntu.com/pool/main/l/linux/",
-        "https://ddebs.ubuntu.com/ubuntu/pool/main/l/linux/",
+        f"http://ddebs.ubuntu.com/pool/main/l/linux-hwe-{major_minor}/",
     ]
-    package_prefixes = [
-        f"linux-image-unsigned-{kernel_version}-{build}-{flavor}-dbgsym_",
-        f"linux-image-{kernel_version}-{build}-{flavor}-dbgsym_",
-    ]
+    prefix = f"linux-image-unsigned-{kernel_version}-{build}-{flavor}-dbgsym_"
 
     for pool_url in pool_urls:
         try:
             response = requests.get(pool_url, timeout=timeout)
             response.raise_for_status()
-            html = response.text
         except requests.RequestException:
             continue
 
-        matches = []
-        for prefix in package_prefixes:
-            pattern = rf'href="({re.escape(prefix)}[^"]*_{re.escape(arch)}\.ddeb)"'
-            matches.extend(re.findall(pattern, html))
+        pattern = rf'href="({re.escape(prefix)}[^"]*_{re.escape(arch)}\.ddeb)"'
+        matches = re.findall(pattern, response.text)
 
         if matches:
             # Keep deterministic behavior and prefer highest lexical revision.

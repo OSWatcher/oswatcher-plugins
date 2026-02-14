@@ -11,7 +11,6 @@ from attrs import define, field
 from neogit.model.neo import Commit
 
 from plugins.plugins.linux_symbols_service import (
-    construct_ddeb_url,
     detect_ubuntu_codename,
     extract_vmlinux_from_ddeb,
     parse_kernel_version_parts,
@@ -149,11 +148,14 @@ class LinuxSymbolsPlugin(AbstractPlugin):
         # Convert architecture
         ddeb_arch = lief_arch_to_ddeb_arch(kernel_info.architecture)
 
-        # Resolve exact ddeb URL from repository metadata when codename is known.
+        # Resolve exact ddeb URL from repository metadata.
         ddeb_url = resolve_ddeb_url_from_packages(version, build, flavor, ddeb_arch, codename)
         if ddeb_url is None:
-            ddeb_url = construct_ddeb_url(version, build, flavor, ddeb_arch)
-            self.logger.warning(f"Falling back to heuristic ddeb URL: {ddeb_url}")
+            self.logger.error(
+                f"Could not resolve debug package URL for {kernel_info.filename} "
+                f"(codename={codename}, arch={ddeb_arch})"
+            )
+            return
 
         self.logger.info(f"Debug package URL: {ddeb_url}")
 

@@ -496,3 +496,48 @@ class TestLinuxSymbolsPluckyIntegration:
         """vmlinux should be extracted successfully from the downloaded ddeb."""
         assert plucky_vmlinux_path.exists()
         assert plucky_vmlinux_path.stat().st_size > 100_000_000
+
+
+@pytest.mark.integration
+class TestDdebUrlResolution:
+    """Integration tests that verify ddeb URL resolution for real kernels.
+
+    These tests hit ddebs.ubuntu.com to verify that the resolution logic
+    finds valid unsigned debug packages. They only check HTTP HEAD (no
+    large downloads).
+    """
+
+    @pytest.mark.parametrize(
+        "version,build,codename",
+        [
+            # jammy (22.04) native
+            ("5.15.0", "160", "jammy"),
+            # jammy HWE kernels (backported from kinetic, lunar, mantic)
+            ("5.19.0", "46", "jammy"),
+            ("6.2.0", "39", "jammy"),
+            ("6.5.0", "44", "jammy"),
+            # noble (24.04) native
+            ("6.8.0", "45", "noble"),
+            # noble HWE kernel (backported from plucky)
+            ("6.14.0", "37", "noble"),
+        ],
+        ids=[
+            "jammy-native-5.15",
+            "jammy-hwe-5.19",
+            "jammy-hwe-6.2",
+            "jammy-hwe-6.5",
+            "noble-native-6.8",
+            "noble-hwe-6.14",
+        ],
+    )
+    def test_resolve_ddeb_url(self, version, build, codename):
+        """Resolution should find a real unsigned dbgsym ddeb."""
+        url = resolve_ddeb_url_from_packages(version, build, "generic", "amd64", codename, timeout=60)
+        assert url is not None, f"Failed to resolve ddeb URL for {version}-{build} ({codename})"
+        assert "linux-image-unsigned-" in url, f"Expected unsigned package, got: {url}"
+
+        # Verify the URL points to a real, non-stub package
+        response = requests.head(url, timeout=30)
+        assert response.status_code == 200, f"HEAD {url} returned {response.status_code}"
+        content_length = int(response.headers.get("content-length", 0))
+        assert content_length > 1_000_000, f"Package too small ({content_length} bytes), likely a stub or error page"
