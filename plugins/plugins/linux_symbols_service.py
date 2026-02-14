@@ -283,7 +283,16 @@ def extract_vmlinux_from_ddeb(ddeb_path: Path, output_dir: Path) -> Path:
 
         data_tar_path = tmpdir_path / data_tar_name
 
-        # Open data.tar (handles .xz, .zst, .gz transparently)
+        # tarfile doesn't support zstd until Python 3.14, decompress first
+        if data_tar_name.endswith(".zst"):
+            plain_tar_path = tmpdir_path / "data.tar"
+            subprocess.run(
+                ["zstd", "-d", str(data_tar_path), "-o", str(plain_tar_path)],
+                check=True,
+            )
+            data_tar_path = plain_tar_path
+
+        # Open data.tar (handles .xz, .gz, .bz2 and plain tar)
         with tarfile.open(data_tar_path, "r:*") as tar:
             # Find vmlinux file
             vmlinux_member: Optional[tarfile.TarInfo] = None
