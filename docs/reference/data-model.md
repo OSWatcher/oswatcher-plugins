@@ -522,6 +522,9 @@ Currently processes these files (when detected as PE MIME type):
 - `ntoskrnl.exe`
 - `ntdll.dll`
 - `kernel32.dll`
+- `win32kfull.sys`
+- `win32kbase.sys`
+- `win32k.sys`
 
 ---
 

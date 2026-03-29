@@ -47,7 +47,7 @@ All plugins are in `plugins/plugins/`:
 
 1. **FileTypePlugin** (`filetype.py`) - Identifies MIME types of blobs using libmagic
 2. **WinRegistryPlugin** (`registry.py`) - Parses Windows registry hives (SAM, SECURITY, SOFTWARE, SYSTEM, BCD) and stores keys/values as graph nodes
-3. **SymbolsPlugin** (`symbols.py`) - Extracts PDB debug symbols from PE files (ntoskrnl.exe, ntdll.dll, kernel32.dll) and stores structs/symbols
+3. **SymbolsPlugin** (`symbols.py`) - Extracts PDB debug symbols from PE files (ntoskrnl.exe, ntdll.dll, kernel32.dll, win32kfull.sys, win32kbase.sys, win32k.sys) and stores structs/symbols
 
 ### Merkle Tree Pattern
 

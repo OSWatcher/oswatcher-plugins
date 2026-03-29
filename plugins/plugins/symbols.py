@@ -341,7 +341,14 @@ class SymbolsPlugin(AbstractPlugin):
 
     PE_MIME_TYPE = "application/vnd.microsoft.portable-executable"
     # only process these filenames for now
-    FILTER_FILENAME = ["ntoskrnl.exe", "ntdll.dll", "kernel32.dll"]
+    FILTER_FILENAME = [
+        "ntoskrnl.exe",
+        "ntdll.dll",
+        "kernel32.dll",
+        "win32kfull.sys",
+        "win32kbase.sys",
+        "win32k.sys",
+    ]
 
     @property
     def repository(self) -> SymbolsRepository:

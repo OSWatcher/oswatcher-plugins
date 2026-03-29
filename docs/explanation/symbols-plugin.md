@@ -2,7 +2,7 @@
 
 ## Overview
 
-The SymbolsPlugin extracts debugging symbols and type information from Windows PE files (ntoskrnl.exe, ntdll.dll, kernel32.dll) by parsing their associated PDB (Program Database) files. It creates a content-addressed graph representation of:
+The SymbolsPlugin extracts debugging symbols and type information from Windows PE files (ntoskrnl.exe, ntdll.dll, kernel32.dll, win32kfull.sys, win32kbase.sys, win32k.sys) by parsing their associated PDB (Program Database) files. It creates a content-addressed graph representation of:
 
 - **Symbols**: Function names and addresses
 - **User-defined types**: Structs, unions, enums with their fields
@@ -241,7 +241,14 @@ def run(self, commit: Commit):
     # Filter to only allowed filenames
     valid_blobs = filter_valid_filenames(
         blob_results,
-        allowed_filenames=["ntoskrnl.exe", "ntdll.dll", "kernel32.dll"]
+        allowed_filenames=[
+            "ntoskrnl.exe",
+            "ntdll.dll",
+            "kernel32.dll",
+            "win32kfull.sys",
+            "win32kbase.sys",
+            "win32k.sys",
+        ]
     )
 ```
 
@@ -817,9 +824,16 @@ Integration tests are out of scope per user requirements, but would include:
        return self._repository
    ```
 
-4. **Filtered Filename Query**: Only process 3 specific PE files
+4. **Filtered Filename Query**: Only process 6 specific PE files
    ```python
-   allowed_filenames = ["ntoskrnl.exe", "ntdll.dll", "kernel32.dll"]
+   allowed_filenames = [
+       "ntoskrnl.exe",
+       "ntdll.dll",
+       "kernel32.dll",
+       "win32kfull.sys",
+       "win32kbase.sys",
+       "win32k.sys",
+   ]
    ```
 
 ## Common Queries
