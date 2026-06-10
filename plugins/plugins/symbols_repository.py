@@ -1,3 +1,6 @@
+# Copyright 2021-2026 Mathieu Tarral
+# SPDX-License-Identifier: Apache-2.0
+
 """Repository layer for symbols plugin Neo4j operations."""
 
 from pathlib import PurePath

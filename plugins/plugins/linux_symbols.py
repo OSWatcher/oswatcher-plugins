@@ -1,3 +1,6 @@
+# Copyright 2021-2026 Mathieu Tarral
+# SPDX-License-Identifier: Apache-2.0
+
 """Linux kernel symbol extraction plugin using DWARF debug info from Ubuntu ddebs."""
 
 from __future__ import annotations

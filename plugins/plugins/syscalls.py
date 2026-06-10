@@ -1,3 +1,6 @@
+# Copyright 2021-2026 Mathieu Tarral
+# SPDX-License-Identifier: Apache-2.0
+
 """Linux syscall extraction plugin using kernel filesystem analysis and Git repository."""
 
 from typing import Dict, List

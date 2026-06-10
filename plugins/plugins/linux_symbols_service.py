@@ -1,3 +1,6 @@
+# Copyright 2021-2026 Mathieu Tarral
+# SPDX-License-Identifier: Apache-2.0
+
 """Pure functions for Linux kernel symbol extraction.
 
 This module provides pure functions for:

@@ -1,3 +1,6 @@
+# Copyright 2021-2026 Mathieu Tarral
+# SPDX-License-Identifier: Apache-2.0
+
 """Kernel version and syscall parsing from boot filenames and headers."""
 
 import re
