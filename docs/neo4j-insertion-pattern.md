@@ -905,12 +905,12 @@ FOREACH (ck IN $child_keys |
 
 ### Implementation Examples
 
-- **Symbols Plugin**: `/home/wenzel/Projets/grapheos-plugins/plugins/plugins/symbols.py`
+- **Symbols Plugin**: [`plugins/plugins/symbols.py`](../plugins/plugins/symbols.py)
   - Complex hierarchical data (structs with fields, datatypes)
   - Multiple visitor methods for different node types
   - Batch insertion with UNWIND
 
-- **Registry Plugin**: `/home/wenzel/Projets/grapheos-plugins/plugins/plugins/registry.py`
+- **Registry Plugin**: [`plugins/plugins/registry.py`](../plugins/plugins/registry.py)
   - Tree-structured data (keys with subkeys and values)
   - Separation of Blob vs Tree children
   - Recursive insertion pattern
@@ -925,4 +925,4 @@ FOREACH (ck IN $child_keys |
 ### Related Documentation
 
 - [Syscall Data Model Specification](syscall-data-model.md) - Specific application for syscall data
-- [Diff Algorithm Documentation](/home/wenzel/Projets/osw-frontend/docs/reference/architecture.md) - Why relationship `name` property is required
+- Diff Algorithm Documentation (`osw-frontend` repo — `docs/reference/architecture.md`) - Why relationship `name` property is required

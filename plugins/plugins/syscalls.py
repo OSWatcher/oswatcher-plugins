@@ -77,7 +77,7 @@ class SyscallsPlugin(AbstractPlugin):
             Dictionary mapping kernel version to list of syscall data
         """
         syscall_data = {}
-        cache_dir = appdirs.user_cache_dir("grapheos-plugins")
+        cache_dir = appdirs.user_cache_dir("oswatcher-plugins")
         self.logger.info(f"Cloning/updating Linux kernel repository to {cache_dir}")
         repo = ensure_kernel_repo(cache_dir)
 

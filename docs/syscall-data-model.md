@@ -417,7 +417,7 @@ This enables:
 
 ## GraphQL Schema Integration
 
-The syscall data model will be added to `/home/wenzel/Projets/graphql-api/type-defs.graphql`:
+The syscall data model will be added to `graphql-api/type-defs.graphql` in the [graphql-api](https://github.com/OSWatcher/graphql-api) repository:
 
 ```graphql
 type SyscallTable implements Hashable {
@@ -466,6 +466,5 @@ type Blob implements Hashable {
 
 ## References
 
-- Diff algorithm documentation: `/home/wenzel/Projets/osw-frontend/docs/reference/architecture.md` (Section 4)
-- Diff algorithm implementation: `/home/wenzel/Projets/grapheos-procedures/src/main/java/example/TreeDiffRecursiveProcedure.java`
-- Plugin implementation: `/home/wenzel/Projets/grapheos-plugins/plugins/plugins/syscalls.py`
+- Diff algorithm implementation: `grapheos-procedures` repo — `src/main/java/example/TreeDiffRecursiveProcedure.java`
+- Plugin implementation: [`plugins/plugins/syscalls.py`](../plugins/plugins/syscalls.py)
