@@ -1,10 +1,16 @@
 [tool.poetry]
-name = "plugins"
-version = "0.13.2"
-description = ""
+name = "oswatcher-plugins"
+version = "0.14.0"
+description = "Analysis plugins for OSWatcher — extract and analyze OS artifacts into Neo4j"
 authors = ["Mathieu Tarral <mathieu.tarral@protonmail.com>"]
-license = "private"
+license = "Apache-2.0"
 readme = "README.md"
+homepage = "https://github.com/OSWatcher/oswatcher-plugins"
+repository = "https://github.com/OSWatcher/oswatcher-plugins"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+]
 
 [build-system]
 requires = ["poetry-core"]
@@ -15,7 +21,7 @@ runner = 'plugins.__main__:runner'
 
 [tool.poetry.dependencies]
 python = "^3.11"
-neogit = { git = "https://github.com/OSWatcher/neogit.git", tag = "v0.13.3" }
+neogit = "^0.16.0"
 poethepoet = "^0.26.1"
 ipdb = "^0.13.13"
 click = "^8.1.7"

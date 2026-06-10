@@ -994,37 +994,34 @@ pyarrow = ["pyarrow (>=1.0.0)"]
 
 [[package]]
 name = "neogit"
-version = "0.13.1"
+version = "0.16.0"
 description = "Git-like tool backed by Neo4j"
 optional = false
-python-versions = "^3.11"
+python-versions = "<4.0,>=3.10"
 groups = ["main"]
-files = []
-develop = false
+files = [
+    {file = "neogit-0.16.0-py3-none-any.whl", hash = "sha256:7ff561bddd6e30e1459358fa1d7815311fce5ee327ec998cd060e927f612a416"},
+    {file = "neogit-0.16.0.tar.gz", hash = "sha256:6d7776888ee82da584973c436f67667abf4511a275e0b6c04a227d7796601943"},
+]
 
 [package.dependencies]
 apache-libcloud = "3.8.0"
 appdirs = "1.4.4"
-attrs = "^23.2.0"
+attrs = ">=23.2.0,<24.0.0"
 coloredlogs = "15.0"
 docopt = "0.6.2"
 dynaconf = "3.2.5"
 fasteners = "0.16"
-ipdb = "^0.13.13"
+ipdb = ">=0.13.13,<0.14.0"
 more-itertools = "8.7.0"
 neo4j = "5.19"
 neomodel = "5.3.2"
-poethepoet = "^0.26.1"
+poethepoet = ">=0.26.1,<0.27.0"
 py2neo-history = "2021.2.0"
 PyYAML = "6.0.1"
-rich = "14.0.0"
-types-PyYAML = "^6.0.0"
-
-[package.source]
-type = "git"
-url = "https://github.com/OSWatcher/neogit.git"
-reference = "v0.13.3"
-resolved_reference = "f67bf2c9dffdf1047a9c9c1e0009ae6ed030b7a7"
+rich = ">=15.0.0,<16.0.0"
+types-PyYAML = ">=6.0.0,<7.0.0"
+typing-extensions = ">=4.0.0,<5.0.0"
 
 [[package]]
 name = "neomodel"
@@ -1537,14 +1534,14 @@ use-chardet-on-py3 = ["chardet (>=3.0.2,<6)"]
 
 [[package]]
 name = "rich"
-version = "14.0.0"
+version = "15.0.0"
 description = "Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal"
 optional = false
-python-versions = ">=3.8.0"
+python-versions = ">=3.9.0"
 groups = ["main"]
 files = [
-    {file = "rich-14.0.0-py3-none-any.whl", hash = "sha256:1c9491e1951aac09caffd42f448ee3d04e58923ffe14993f6e83068dc395d7e0"},
-    {file = "rich-14.0.0.tar.gz", hash = "sha256:82f1bc23a6a21ebca4ae0c45af9bdbc492ed20231dcb63f297d6d1021a9d5725"},
+    {file = "rich-15.0.0-py3-none-any.whl", hash = "sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb"},
+    {file = "rich-15.0.0.tar.gz", hash = "sha256:edd07a4824c6b40189fb7ac9bc4c52536e9780fbbfbddf6f1e2502c31b068c36"},
 ]
 
 [package.dependencies]
@@ -1873,7 +1870,6 @@ files = [
     {file = "typing_extensions-4.15.0-py3-none-any.whl", hash = "sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548"},
     {file = "typing_extensions-4.15.0.tar.gz", hash = "sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466"},
 ]
-markers = {main = "python_version < \"3.13\""}
 
 [[package]]
 name = "urllib3"
@@ -1930,4 +1926,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "6d63660fffbbc21e19dcd1336d199f1d07e5d52db5bf5d782fbffad784506110"
+content-hash = "6ce9b4b2f1491e1106e5bffc6b04fc422a50496db8442401b1c4740d364ea25f"
