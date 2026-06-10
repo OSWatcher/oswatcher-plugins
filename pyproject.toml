@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "oswatcher-plugins"
-version = "0.14.0"
+version = "0.14.1"
 description = "Analysis plugins for OSWatcher — extract and analyze OS artifacts into Neo4j"
 authors = ["Mathieu Tarral <mathieu.tarral@protonmail.com>"]
 license = "Apache-2.0"
