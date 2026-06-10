@@ -36,7 +36,7 @@ def parse_syscall_signature(syscalls_h_content: str, entry_name: str) -> Optiona
 
     # Handle void case
     if params_str.strip() == "void":
-        parameters = []
+        parameters: list = []
     else:
         # Split by comma and clean up
         parameters = []

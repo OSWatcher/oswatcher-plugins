@@ -76,7 +76,7 @@ class SyscallsMerkleVisitor(MerkleVisitor):
         data = f"{node.index}-{node.name}-{node.entry_point}-{params_json}".encode()
         hash_obj.update(data)
 
-        merkle_node = SyscallMerkleNode(
+        merkle_node = SyscallMerkleNode(  # type: ignore[call-arg]
             hash=hash_obj.hexdigest(),
             label=MerkleLabel.Blob,  # Leaf node
             name=node.name,
@@ -110,7 +110,7 @@ class SyscallsMerkleVisitor(MerkleVisitor):
         # Add table metadata
         hash_obj.update(f"{node.architecture}".encode())
 
-        merkle_node = SyscallTableMerkleNode(
+        merkle_node = SyscallTableMerkleNode(  # type: ignore[call-arg]
             hash=hash_obj.hexdigest(),
             children=children,
             label=MerkleLabel.Tree,  # Internal node

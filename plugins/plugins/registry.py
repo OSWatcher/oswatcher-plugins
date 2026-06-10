@@ -93,7 +93,9 @@ class WinRegMerkleVisitor(MerkleVisitor):
 
     def visit_WinRegValueNode(self, node: WinRegValueNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
         hash_obj.update(f"{node.value.name}{node.value.value}{node.value.value_type}".encode())
-        merkle_node = WinRegValueMerkleNode(hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, value=node.value)
+        merkle_node = WinRegValueMerkleNode(  # type: ignore[call-arg]
+            hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, value=node.value
+        )
         return VisitedNode(node, merkle_node)
 
     def visit_WinRegKeyNode(self, node: WinRegKeyNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
@@ -114,7 +116,7 @@ class WinRegMerkleVisitor(MerkleVisitor):
             # merkle_node.children.clear()
             merkle_children[child_node.name] = merkle_node
         # compute final hash
-        merkle_node = WinRegKeyMerkleNode(
+        merkle_node = WinRegKeyMerkleNode(  # type: ignore[call-arg]
             hash=hash_obj.hexdigest(), children=merkle_children, label=MerkleLabel.Tree, key=node.key
         )
         return VisitedNode(node, merkle_node)
