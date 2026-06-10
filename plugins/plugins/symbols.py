@@ -157,7 +157,7 @@ class DataTypeNode(Node):
     def iter_child_nodes(self) -> Generator[Node, None, None]:
         match self.kind:
             case FieldKindType.Array | FieldKindType.Bitfield | FieldKindType.Pointer:
-                yield DataTypeNode(data_type=self.subtype)
+                yield DataTypeNode(data_type=self.subtype)  # type: ignore[arg-type]
 
 
 @define(auto_attribs=True)
@@ -196,7 +196,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 | FieldKindType.Function
             ):
                 hash_obj.update(f"{node.name}".encode())
-                merkle_node = DataTypeMerkleNode(
+                merkle_node = DataTypeMerkleNode(  # type: ignore[call-arg]
                     hash=hash_obj.hexdigest(), label=MerkleLabel.Blob, kind=node.kind, name=node.name
                 )
                 return VisitedNode(node, merkle_node)
@@ -206,7 +206,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 merkle_node = visited_node.return_value
                 data = f"{merkle_node.hash}-{node.array_counter}\n".encode()
                 hash_obj.update(data)
-                merkle_node = DataTypeMerkleNode(
+                merkle_node = DataTypeMerkleNode(  # type: ignore[call-arg]
                     hash=hash_obj.hexdigest(),
                     label=MerkleLabel.Blob,
                     kind=node.kind,
@@ -220,7 +220,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 merkle_node = visited_node.return_value
                 data = f"{merkle_node.hash}-{node.bit_length}-{node.bit_position}\n".encode()
                 hash_obj.update(data)
-                merkle_node = DataTypeMerkleNode(
+                merkle_node = DataTypeMerkleNode(  # type: ignore[call-arg]
                     hash=hash_obj.hexdigest(),
                     label=MerkleLabel.Blob,
                     kind=node.kind,
@@ -235,7 +235,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 merkle_node = visited_node.return_value
                 data = f"{merkle_node.hash}\n".encode()
                 hash_obj.update(data)
-                merkle_node = DataTypeMerkleNode(
+                merkle_node = DataTypeMerkleNode(  # type: ignore[call-arg]
                     hash=hash_obj.hexdigest(),
                     label=MerkleLabel.Blob,
                     kind=node.kind,
@@ -244,7 +244,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
                 return VisitedNode(node, merkle_node)
 
     def visit_StructFieldNode(self, node: StructFieldNode, hash_obj: hashlib._Hash, *args, **kwargs) -> VisitedNode:
-        children = {}
+        children: dict = {}
         # for data_type in node.iter_child_nodes():
         #     visited_node = self.visit(data_type)
         #     merkle_node = visited_node.return_value
@@ -253,7 +253,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
         #     children[merkle_node.hash] = merkle_node
         # merklize the offset and the data type string
         hash_obj.update(f"{node.offset}-{node.data_type}".encode())
-        merkle_node = StructFieldMerkleNode(
+        merkle_node = StructFieldMerkleNode(  # type: ignore[call-arg]
             hash=hash_obj.hexdigest(),
             label=MerkleLabel.Blob,
             name=node.name,
@@ -273,7 +273,7 @@ class SymbolsMerkleVisitor(MerkleVisitor):
             hash_obj.update(data)
             children[member.name] = merkle_node
         hash_obj.update(f"{node.size}-{node.kind.name}".encode())
-        merkle_node = StructMerkleNode(
+        merkle_node = StructMerkleNode(  # type: ignore[call-arg]
             hash=hash_obj.hexdigest(),
             children=children,
             label=MerkleLabel.Tree,
@@ -337,7 +337,7 @@ def retrieve_pdb(guid, age, pdb_name) -> str:
 @define(auto_attribs=True)
 class SymbolsPlugin(AbstractPlugin):
     max_workers: int = field(init=False, default=os.cpu_count())
-    _repository: SymbolsRepository = field(init=False, default=None)
+    _repository: Optional[SymbolsRepository] = field(init=False, default=None)
 
     PE_MIME_TYPE = "application/vnd.microsoft.portable-executable"
     # only process these filenames for now
@@ -357,7 +357,7 @@ class SymbolsPlugin(AbstractPlugin):
             self._repository = SymbolsRepository(self.neogit)
         return self._repository
 
-    def constraints_data(self) -> lief.List[UniqueConstraint]:
+    def constraints_data(self) -> list[UniqueConstraint]:
         return [
             UniqueConstraint(label="Symbol", property_list=["hash"]),
             UniqueConstraint(label="Struct", property_list=["hash"]),
@@ -408,7 +408,7 @@ class SymbolsPlugin(AbstractPlugin):
             return blob_hash, *ret
 
     @return_exceptions
-    def stage_process_pdb(self, arg) -> Tuple[str, Path]:
+    def stage_process_pdb(self, arg) -> Tuple[str, str, Path]:
         blob_hash, guid, age, pdb_name = arg
         try:
             location = retrieve_pdb(guid, age, pdb_name)
