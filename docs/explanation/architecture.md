@@ -1,10 +1,10 @@
 # Architecture
 
-This document explains the overall architecture of GraphEOS Plugins and how its components work together.
+This document explains the overall architecture of OSWatcher Plugins and how its components work together.
 
 ## System Overview
 
-GraphEOS Plugins is a framework for analyzing filesystem snapshots stored in a Neo4j graph database. It extends the base data model provided by [neogit](https://github.com/OSWatcher/neogit) with domain-specific analysis results.
+OSWatcher Plugins is a framework for analyzing filesystem snapshots stored in a Neo4j graph database. It extends the base data model provided by [neogit](https://github.com/OSWatcher/neogit) with domain-specific analysis results.
 
 ```mermaid
 flowchart TB

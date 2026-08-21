@@ -13,7 +13,7 @@ def test_real_syscall_extraction_v5_15():
     from plugins.syscalls.syscalls_h_parser import parse_syscall_signature
 
     # Use appdirs for cache directory
-    cache_dir = appdirs.user_cache_dir("grapheos-plugins")
+    cache_dir = appdirs.user_cache_dir("oswatcher-plugins")
     repo = ensure_kernel_repo(cache_dir)
 
     # Extract syscall files for v5.15
@@ -79,7 +79,7 @@ def test_syscall_extraction_across_kernel_versions():
     from plugins.syscalls.syscalls_h_parser import parse_syscall_signature
 
     # Use appdirs for cache directory
-    cache_dir = appdirs.user_cache_dir("grapheos-plugins")
+    cache_dir = appdirs.user_cache_dir("oswatcher-plugins")
     repo = ensure_kernel_repo(cache_dir)
 
     # Get all kernel version tags from git

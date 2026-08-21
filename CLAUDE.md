@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Grapheos Plugins is a plugin framework for processing and analyzing data from Git commits stored in a Neo4j graph database via the `neogit` library. Plugins analyze filesystem artifacts (Windows registry hives, PE files, etc.) and store structured results as graph nodes and relationships.
+OSWatcher Plugins is a plugin framework for processing and analyzing data from Git commits stored in a Neo4j graph database via the `neogit` library. Plugins analyze filesystem artifacts (Windows registry hives, PE files, etc.) and store structured results as graph nodes and relationships.
 
 ## Development Commands
 

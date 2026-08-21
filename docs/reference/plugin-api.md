@@ -1,6 +1,6 @@
 # Plugin API Reference
 
-This document describes the API for creating plugins in GraphEOS Plugins.
+This document describes the API for creating plugins in OSWatcher Plugins.
 
 ## AbstractPlugin
 

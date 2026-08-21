@@ -8,7 +8,7 @@ The SymbolsPlugin extracts debugging symbols and type information from Windows P
 - **User-defined types**: Structs, unions, enums with their fields
 - **Data types**: Complex recursive type definitions (pointers, arrays, bitfields)
 
-This plugin is one of the most complex in the GraphEOS ecosystem due to:
+This plugin is one of the most complex in the OSWatcher ecosystem due to:
 
 1. **External dependencies**: Volatility3 for PDB parsing, symbol server downloads
 2. **Recursive data structures**: WinDataType nodes can contain nested type hierarchies

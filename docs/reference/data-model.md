@@ -1,6 +1,6 @@
 # Data Model Reference
 
-This document describes the complete Neo4j data model used by GraphEOS Plugins, including the base model from neogit and all plugin-specific extensions.
+This document describes the complete Neo4j data model used by OSWatcher Plugins, including the base model from neogit and all plugin-specific extensions.
 
 ## Overview
 

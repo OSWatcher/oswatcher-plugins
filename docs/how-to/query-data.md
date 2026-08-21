@@ -1,6 +1,6 @@
 # How to Query Plugin Data
 
-This guide provides Cypher query examples for accessing data created by GraphEOS Plugins.
+This guide provides Cypher query examples for accessing data created by OSWatcher Plugins.
 
 ## Base Model Queries
 

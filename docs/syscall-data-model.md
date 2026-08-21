@@ -2,11 +2,11 @@
 
 ## Overview
 
-This document specifies the Neo4j data model for storing Linux and Windows syscall information in the GraphEOS system. The design follows the hash-based, git-like architecture where all nodes are content-addressed and immutable.
+This document specifies the Neo4j data model for storing Linux and Windows syscall information in the OSWatcher system. The design follows the hash-based, git-like architecture where all nodes are content-addressed and immutable.
 
 ## Motivation
 
-GraphEOS needs to track syscall information from operating system snapshots for:
+OSWatcher needs to track syscall information from operating system snapshots for:
 - Security analysis (identifying available attack surface)
 - OS fingerprinting (kernel version detection)
 - Change detection (tracking syscall additions/removals across versions)
@@ -466,5 +466,5 @@ type Blob implements Hashable {
 
 ## References
 
-- Diff algorithm implementation: `grapheos-procedures` repo — `src/main/java/example/TreeDiffRecursiveProcedure.java`
+- Diff algorithm implementation: `oswatcher-procedures` repo — `src/main/java/io/oswatcher/TreeDiffRecursiveProcedure.java`
 - Plugin implementation: [`plugins/plugins/syscalls.py`](../plugins/plugins/syscalls.py)

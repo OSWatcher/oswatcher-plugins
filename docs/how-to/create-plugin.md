@@ -1,6 +1,6 @@
 # How to Create a New Plugin
 
-This guide walks through creating a new plugin for GraphEOS Plugins.
+This guide walks through creating a new plugin for OSWatcher Plugins.
 
 ## Step 1: Create the Plugin File
 

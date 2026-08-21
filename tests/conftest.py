@@ -1,4 +1,4 @@
-"""pytest configuration for grapheos-plugins.
+"""pytest configuration for oswatcher-plugins.
 
 Imports neogit's test fixtures to reuse Neo4j, MinIO, and object storage setup.
 Also imports custom filesystem fixtures for integration testing.
@@ -8,5 +8,5 @@ Also imports custom filesystem fixtures for integration testing.
 # This works whether neogit is installed from git, PyPI, or local path
 from neogit.testing.fixtures import *  # noqa: F401, F403
 
-# Import grapheos-plugins custom fixtures
+# Import oswatcher-plugins custom fixtures
 from tests.fixtures_linux_fs import *  # noqa: F401, F403

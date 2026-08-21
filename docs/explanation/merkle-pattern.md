@@ -1,6 +1,6 @@
 # Merkle Tree Pattern
 
-This document explains the Merkle tree pattern used throughout GraphEOS Plugins for content-addressed storage and deduplication.
+This document explains the Merkle tree pattern used throughout OSWatcher Plugins for content-addressed storage and deduplication.
 
 ## What is a Merkle Tree?
 
@@ -100,7 +100,7 @@ graph TD
     style Root2 fill:#f96
 ```
 
-## Implementation in GraphEOS Plugins
+## Implementation in OSWatcher Plugins
 
 ### MerkleNode
 

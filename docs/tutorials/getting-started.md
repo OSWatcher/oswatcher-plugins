@@ -12,7 +12,7 @@ This tutorial walks through running your first plugin on a commit.
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd grapheos-plugins
+cd oswatcher-plugins
 
 # Install dependencies
 poetry install

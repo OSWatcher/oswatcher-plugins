@@ -2,7 +2,7 @@
 
 ## Overview
 
-GraphEOS plugins use a **content-addressed merkle tree visitor pattern** to insert hierarchical data into Neo4j. This architecture is inspired by Git's object model and provides efficient storage with built-in deduplication, tamper detection, and change tracking.
+OSWatcher plugins use a **content-addressed merkle tree visitor pattern** to insert hierarchical data into Neo4j. This architecture is inspired by Git's object model and provides efficient storage with built-in deduplication, tamper detection, and change tracking.
 
 ### Three-Layer Architecture
 

@@ -1,6 +1,6 @@
-# GraphEOS Plugins Documentation
+# OSWatcher Plugins Documentation
 
-GraphEOS Plugins is a framework for analyzing filesystem snapshots stored in Neo4j via [neogit](https://github.com/OSWatcher/neogit). It provides plugins that extract and store domain-specific information (MIME types, Windows registry data, debug symbols) as graph nodes.
+OSWatcher Plugins is a framework for analyzing filesystem snapshots stored in Neo4j via [neogit](https://github.com/OSWatcher/neogit). It provides plugins that extract and store domain-specific information (MIME types, Windows registry data, debug symbols) as graph nodes.
 
 ## Quick Links
 
