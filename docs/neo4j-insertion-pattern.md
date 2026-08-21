@@ -925,4 +925,4 @@ FOREACH (ck IN $child_keys |
 ### Related Documentation
 
 - [Syscall Data Model Specification](syscall-data-model.md) - Specific application for syscall data
-- Diff Algorithm Documentation (`osw-frontend` repo — `docs/reference/architecture.md`) - Why relationship `name` property is required
+- Diff Algorithm Documentation (`frontend` repo — `docs/reference/architecture.md`) - Why relationship `name` property is required
